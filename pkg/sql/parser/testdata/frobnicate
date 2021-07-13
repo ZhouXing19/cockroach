@@ -1,0 +1,11 @@
+parse
+FROBNICATE CLUSTER
+----
+
+parse
+FROBNICATE SESSION
+----
+
+parse
+FROBNICATE ALL
+----

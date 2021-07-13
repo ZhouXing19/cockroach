@@ -148,6 +148,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.DropType(ctx, n)
 	case *tree.DropView:
 		return p.DropView(ctx, n)
+	case *tree.Frobnicate:
+		return p.Frobnicate(ctx, n)
 	case *tree.Grant:
 		return p.Grant(ctx, n)
 	case *tree.GrantRole:
@@ -250,6 +252,7 @@ func init() {
 		&tree.DropTable{},
 		&tree.DropType{},
 		&tree.DropView{},
+		&tree.Frobnicate{},
 		&tree.Grant{},
 		&tree.GrantRole{},
 		&tree.ReassignOwnedBy{},

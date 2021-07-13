@@ -757,6 +757,15 @@ func (*Export) cclOnlyStatement() {}
 func (*Export) StatementTag() string { return "EXPORT" }
 
 // StatementReturnType implements the Statement interface.
+func (node *Frobnicate) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (node *Frobnicate) StatementType() StatementType { return TypeDCL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (node *Frobnicate) StatementTag() string               { return "FROBNICATE" }
+
+// StatementReturnType implements the Statement interface.
 func (*Grant) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -1683,3 +1692,4 @@ func (n *Truncate) String() string                       { return AsString(n) }
 func (n *UnionClause) String() string                    { return AsString(n) }
 func (n *Update) String() string                         { return AsString(n) }
 func (n *ValuesClause) String() string                   { return AsString(n) }
+func (n *Frobnicate) String() string									   { return AsString(n) }

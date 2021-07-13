@@ -7,6 +7,7 @@ stmt ::=
 	| execute_stmt
 	| deallocate_stmt
 	| discard_stmt
+	| frobnicate_stmt
 	| grant_stmt
 	| prepare_stmt
 	| revoke_stmt

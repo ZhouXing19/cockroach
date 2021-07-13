@@ -712,7 +712,7 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROM FULL FUNCTION
+%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FOREIGN FROBNICATE FROM FULL FUNCTION
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -1019,6 +1019,8 @@ func (u *sqlSymUnion) objectNamePrefixList() tree.ObjectNamePrefixList {
 %type <tree.Statement> close_cursor_stmt
 %type <tree.Statement> declare_cursor_stmt
 %type <tree.Statement> reindex_stmt
+
+%type <tree.Statement> frobnicate_stmt
 
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
@@ -1393,6 +1395,7 @@ stmt:
 | execute_stmt              // EXTEND WITH HELP: EXECUTE
 | deallocate_stmt           // EXTEND WITH HELP: DEALLOCATE
 | discard_stmt              // EXTEND WITH HELP: DISCARD
+| frobnicate_stmt           // EXTEND WITH HELP: FROBNICATE
 | grant_stmt                // EXTEND WITH HELP: GRANT
 | prepare_stmt              // EXTEND WITH HELP: PREPARE
 | revoke_stmt               // EXTEND WITH HELP: REVOKE
@@ -1410,6 +1413,14 @@ stmt:
   {
     $$.val = tree.Statement(nil)
   }
+
+// %Help: FROBNICATE - twiddle the various settings
+// %Category: Misc
+// %Text: FROBNICATE { CLUSTER | SESSION | ALL }
+frobnicate_stmt:
+  FROBNICATE CLUSTER { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeCluster} }
+| FROBNICATE SESSION { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeSession} }
+| FROBNICATE ALL { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeAll} }
 
 // %Help: ALTER
 // %Category: Group
@@ -12641,6 +12652,7 @@ unreserved_keyword:
 | FOLLOWING
 | FORCE
 | FORCE_INDEX
+| FROBNICATE
 | FUNCTION
 | GENERATED
 | GEOMETRYM
