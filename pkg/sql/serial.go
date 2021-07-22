@@ -51,75 +51,39 @@ var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
-// processSerialInColumnDef analyzes a column definition and determines
-// whether to use a sequence if the requested type is SERIAL-like.
-// If a sequence must be created, it returns an TableName to use
-// to create the new sequence and the DatabaseDescriptor of the
-// parent database where it should be created.
-// The ColumnTableDef is not mutated in-place; instead a new one is returned.
-func (p *planner) processSerialInColumnDef(
-	ctx context.Context, d *tree.ColumnTableDef, tableName *tree.TableName,
-) (
-	*tree.ColumnTableDef,
-	*catalog.ResolvedObjectPrefix,
-	*tree.TableName,
-	tree.SequenceOptions,
-	error,
-) {
-	if !d.IsSerial {
-		// Column is not SERIAL: nothing to do.
-		return d, nil, nil, nil, nil
-	}
+//getNewColDef preprocesses and return the pointer of a new copy of original ColumnTableDef,
+//which will be modified and returned when analyzes a column definition
+// to see if it is SERIAL like
+func getNewColDef(
+	 d *tree.ColumnTableDef,
+) (*tree.ColumnTableDef,) {
 
-	if err := assertValidSerialColumnDef(d, tableName); err != nil {
-		return nil, nil, nil, nil, err
-	}
-
+	// Create a new copy of original tree.ColumnTableDef
 	newSpec := *d
 
 	// Make the column non-nullable in all cases. PostgreSQL requires
 	// this.
 	newSpec.Nullable.Nullability = tree.NotNull
 
-	serialNormalizationMode := p.SessionData().SerialNormalizationMode
-
-	// Find the integer type that corresponds to the specification.
-	switch serialNormalizationMode {
-	case sessiondata.SerialUsesRowID, sessiondata.SerialUsesVirtualSequences:
-		// If unique_rowid() or virtual sequences are requested, we have
-		// no choice but to use the full-width integer type, no matter
-		// which serial size was requested, otherwise the values will not fit.
-		//
-		// TODO(bob): Follow up with https://github.com/cockroachdb/cockroach/issues/32534
-		// when the default is inverted to determine if we should also
-		// switch this behavior around.
-		newSpec.Type = types.Int
-
-	case sessiondata.SerialUsesSQLSequences, sessiondata.SerialUsesCachedSQLSequences:
-		// With real sequences we can use the requested type as-is.
-
-	default:
-		return nil, nil, nil, nil,
-			errors.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
-	}
-
 	// Clear the IsSerial bit now that it's been remapped.
 	newSpec.IsSerial = false
+	return &newSpec
+}
 
-	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
-		defType.Name(), serialNormalizationMode.String()))
 
-	if serialNormalizationMode == sessiondata.SerialUsesRowID {
-		// We're not constructing a sequence for this SERIAL column.
-		// Use the "old school" CockroachDB default.
-		newSpec.DefaultExpr.Expr = uniqueRowIDExpr
-		return &newSpec, nil, nil, nil, nil
-	}
-
+// generateSequenceForSerial generates a new sequence
+// which will be used when creating a SERIAL column
+func (p *planner) generateSequenceForSerial(
+	ctx context.Context, d *tree.ColumnTableDef, tableName *tree.TableName,
+) (
+	*tree.TableName,
+	*tree.FuncExpr,
+	catalog.DatabaseDescriptor,
+	catalog.SchemaDescriptor,
+	string,
+	tree.SequenceOptions,
+	error,
+) {
 	log.VEventf(ctx, 2, "creating sequence for new column %q of %q", d, tableName)
 
 	// We want a sequence; for this we need to generate a new sequence name.
@@ -135,10 +99,17 @@ func (p *planner) processSerialInColumnDef(
 	// Here and below we skip the cache because name resolution using
 	// the cache does not work (well) if the txn retries and the
 	// descriptor was written already in an early txn attempt.
+	//un := seqName.ToUnresolvedObjectName()
+	//dbDesc, schemaDesc, prefix, err := p.ResolveTargetObject(ctx, un)
+	//if err != nil {
+	//	return nil, nil, nil, "", nil, err
+	//}
+	//seqName.ObjectNamePrefix = prefix
+
 	un := seqName.ToUnresolvedObjectName()
 	dbDesc, schemaDesc, prefix, err := p.ResolveTargetObject(ctx, un)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, "", nil, err
 	}
 	seqName.ObjectNamePrefix = prefix
 
@@ -150,7 +121,7 @@ func (p *planner) processSerialInColumnDef(
 		}
 		res, err := p.resolveUncachedTableDescriptor(ctx, seqName, false /*required*/, tree.ResolveAnyTableKind)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil,  nil, nil,"", nil, err
 		}
 		if res == nil {
 			break
@@ -164,7 +135,74 @@ func (p *planner) processSerialInColumnDef(
 
 	seqType := ""
 	seqOpts := realSequenceOpts
-	if serialNormalizationMode == sessiondata.SerialUsesVirtualSequences {
+
+	return seqName, defaultExpr, dbDesc, schemaDesc, seqType, seqOpts, nil
+}
+
+func (p *planner) generateSerialInColumnDef(
+	ctx context.Context,
+	d *tree.ColumnTableDef,
+	tableName *tree.TableName,
+	serialNormalizationModePtr *sessiondata.SerialNormalizationMode,
+	) (
+	*tree.ColumnTableDef,
+	*catalog.ResolvedObjectPrefix,
+	*tree.TableName,
+	tree.SequenceOptions,
+	error,
+	) {
+
+	if err := assertValidSerialColumnDef(d, tableName); err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	newSpec := *getNewColDef(d)
+
+	var serialNormalizationMode sessiondata.SerialNormalizationMode
+	if serialNormalizationModePtr != nil {
+		serialNormalizationMode = *serialNormalizationModePtr
+		switch serialNormalizationMode {
+		case sessiondata.SerialUsesRowID, sessiondata.SerialUsesVirtualSequences:
+			// If unique_rowid() or virtual sequences are requested, we have
+			// no choice but to use the full-width integer type, no matter
+			// which serial size was requested, otherwise the values will not fit.
+			//
+			// TODO(bob): Follow up with https://github.com/cockroachdb/cockroach/issues/32534
+			// when the default is inverted to determine if we should also
+			// switch this behavior around.
+			newSpec.Type = types.Int
+
+		case sessiondata.SerialUsesSQLSequences, sessiondata.SerialUsesCachedSQLSequences:
+			// With real sequences we can use the requested type as-is.
+
+		default:
+			return nil, nil, nil, nil,
+				errors.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
+		}
+	}
+
+	defType, err := tree.ResolveType(ctx, d.Type, p.semaCtx.GetTypeResolver())
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
+		defType.Name(), serialNormalizationMode.String()))
+
+	if serialNormalizationModePtr != nil && serialNormalizationMode == sessiondata.SerialUsesRowID {
+		// We're not constructing a sequence for this SERIAL column.
+		// Use the "old school" CockroachDB default.
+		newSpec.DefaultExpr.Expr = uniqueRowIDExpr
+		return &newSpec, nil, nil, nil, nil
+	}
+
+	log.VEventf(ctx, 2, "creating sequence for new column %q of %q", d, tableName)
+
+	seqName, defaultExpr, dbDesc, schemaDesc, seqType, seqOpts, err := p.generateSequenceForSerial(ctx, d, tableName)
+	if err != nil{
+		return nil, nil, nil, nil, err
+	}
+
+	if serialNormalizationModePtr != nil && serialNormalizationMode == sessiondata.SerialUsesVirtualSequences {
 		seqType = "virtual "
 		seqOpts = virtualSequenceOpts
 	} else if serialNormalizationMode == sessiondata.SerialUsesCachedSQLSequences {
@@ -175,6 +213,7 @@ func (p *planner) processSerialInColumnDef(
 			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
 		}
 	}
+
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
 		d, tableName, seqType, seqName, defaultExpr)
 
@@ -183,6 +222,84 @@ func (p *planner) processSerialInColumnDef(
 	return &newSpec, &catalog.ResolvedObjectPrefix{
 		Database: dbDesc, Schema: schemaDesc,
 	}, seqName, seqOpts, nil
+
+}
+
+func (p *planner) processGenAsIdInColumnDef(
+	ctx context.Context, d *tree.ColumnTableDef, tableName *tree.TableName,
+) (
+	*tree.ColumnTableDef,
+	*catalog.ResolvedObjectPrefix,
+	*tree.TableName,
+	tree.SequenceOptions,
+	error,
+) {
+		curSerialNormalizationMode := sessiondata.SerialUsesSQLSequences
+		newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err :=  p.generateSerialInColumnDef(ctx, d, tableName, &curSerialNormalizationMode)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		return newSpecPtr, catalogPrefixPtr, seqName, seqOpts, nil
+}
+
+func (p *planner) processSerialInColumnDef(
+	ctx context.Context, d *tree.ColumnTableDef, tableName *tree.TableName,
+) (
+	*tree.ColumnTableDef,
+	*catalog.ResolvedObjectPrefix,
+	*tree.TableName,
+	tree.SequenceOptions,
+	error,
+) {
+	serialNormalizationMode := p.SessionData().SerialNormalizationMode
+	newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err :=  p.generateSerialInColumnDef(ctx, d, tableName, &serialNormalizationMode)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return newSpecPtr, catalogPrefixPtr, seqName, seqOpts, nil
+}
+
+// processSerialLikeInColumnDef analyzes a column definition and determines
+// whether to use a sequence if the requested type is SERIAL-like.
+// If a sequence must be created, it returns an TableName to use
+// to create the new sequence and the DatabaseDescriptor of the
+// parent database where it should be created.
+// The ColumnTableDef is not mutated in-place; instead a new one is returned.
+func (p *planner) processSerialLikeInColumnDef(
+	ctx context.Context, d *tree.ColumnTableDef, tableName *tree.TableName,
+) (
+	*tree.ColumnTableDef,
+	*catalog.ResolvedObjectPrefix,
+	*tree.TableName,
+	tree.SequenceOptions,
+	error,
+) {
+
+	var newSpecPtr *tree.ColumnTableDef
+	var catalogPrefixPtr *catalog.ResolvedObjectPrefix
+	var seqName *tree.TableName
+	var seqOpts tree.SequenceOptions
+	var err error
+
+	if d.IsSerial{
+		newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err = p.processSerialInColumnDef(ctx, d, tableName)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+
+	} else if d.Generated.IsGenerated {
+		switch d.Generated.GeneratedAsIdType {
+			case tree.GeneratedByDefault:
+
+				newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err = p.processGenAsIdInColumnDef(ctx, d, tableName)
+				if err != nil {
+					return nil, nil, nil, nil, err
+				}
+		}
+	} else {
+		return d, nil, nil, nil, nil
+	}
+	return newSpecPtr, catalogPrefixPtr, seqName, seqOpts, nil
 }
 
 // SimplifySerialInColumnDefWithRowID analyzes a column definition and
@@ -241,6 +358,5 @@ func assertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *tree.TableNam
 			"SERIAL column %q of table %q cannot be computed",
 			tree.ErrString(&d.Name), tree.ErrString(tableName))
 	}
-
 	return nil
 }
