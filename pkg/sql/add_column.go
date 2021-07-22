@@ -59,7 +59,7 @@ func (p *planner) addColumnImpl(
 		)
 	}
 
-	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
+	newDef, seqPrefix, seqName, seqOpts, err := params.p.processSerialLikeInColumnDef(params.ctx, d, tn)
 	if err != nil {
 		return err
 	}

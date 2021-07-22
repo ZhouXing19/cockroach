@@ -535,7 +535,7 @@ var specs = []stmtSpec{
 	{
 		name:   "col_qualification",
 		stmt:   "col_qualification",
-		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_as"},
+		inline: []string{"col_qualification_elem", "opt_hash_sharded", "generated_always_as"},
 		replace: map[string]string{
 			"'=' a_expr": "'=' n_buckets",
 		},
