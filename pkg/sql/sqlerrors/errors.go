@@ -46,7 +46,7 @@ func NewTransactionCommittedError() error {
 
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
-	return pgerror.Newf(pgcode.NotNullViolation, "null2 value in column %q violates not-null constraint", columnName)
+	return pgerror.Newf(pgcode.NotNullViolation, "null3 value in column %q violates not-null constraint", columnName)
 }
 
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema

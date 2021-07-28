@@ -441,6 +441,7 @@ type ColumnTableDef struct {
 		Create      bool
 		IfNotExists bool
 	}
+	DisallowExplicitWrite bool
 }
 
 // ColumnTableDefCheckExpr represents a check constraint on a column definition
