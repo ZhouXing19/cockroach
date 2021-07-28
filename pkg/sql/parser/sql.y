@@ -6680,7 +6680,7 @@ col_qualification_elem:
  {
     $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: true}
  }
-|generated_as IDENTITY
+| generated_as IDENTITY
 {
 		$$.val = &tree.DisallowExplctWriteConstraint{}
 }
@@ -6689,6 +6689,7 @@ col_qualification_elem:
     sqllex.Error("use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL")
     return 1
  }
+
 
 opt_without_index:
   WITHOUT INDEX
@@ -6706,8 +6707,8 @@ generated_as:
   AS {}
 | GENERATED_ALWAYS ALWAYS AS {}
 
-overriding_system_value:
-OVERRIDING_SYSTEM_VALUE SYSTEM VALUE {}
+overriding_system_val:
+OVERRIDING_SYSTEM_VALUE SYSTEM VALUE{}
 
 index_def:
   INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -8906,6 +8907,11 @@ select_clause:
   '(' error // SHOW HELP: <SELECTCLAUSE>
 | simple_select
 | select_with_parens
+| overriding_system_val values_clause
+	{
+	    sqllex.Error("overring have not implemented yet haha.")
+      return 1
+	}
 
 // This rule parses SELECT statements that can appear within set operations,
 // including UNION, INTERSECT and EXCEPT. '(' and ')' can be used to specify
@@ -13002,6 +13008,7 @@ unreserved_keyword:
 | OVER
 | OWNED
 | OWNER
+| OVERRIDING
 | PARENT
 | PARTIAL
 | PARTITION
