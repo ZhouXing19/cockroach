@@ -276,6 +276,8 @@ type Column interface {
 
 	// IsSystemColumn returns true iff the column is a system column.
 	IsSystemColumn() bool
+
+	IsDisallowedForExplicitWrite() bool
 }
 
 // ConstraintToUpdate is an interface around a constraint mutation.
