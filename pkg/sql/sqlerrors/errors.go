@@ -46,7 +46,14 @@ func NewTransactionCommittedError() error {
 
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
-	return pgerror.Newf(pgcode.NotNullViolation, "null3 value in column %q violates not-null constraint", columnName)
+	return pgerror.Newf(pgcode.NotNullViolation, "null value in column %q violates not-null constraint", columnName)
+}
+
+// NewDisallowExplicitWriteError creates an error for a violation of a disallow explicit write constraint.
+func NewDisallowExplicitWriteError(columnName string) error {
+	return pgerror.Newf(pgcode.DisallowExplicitWrite, "column %q cannot be explicitly overridden " +
+																													 "because it is always generated as an identity column." +
+																													 "Try INSERT with OVERRIDING SYSTEM VALUE.", columnName)
 }
 
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema

@@ -576,7 +576,6 @@ func NewColumnTableDef(
 			d.Family.IfNotExists = t.IfNotExists
 		case *DisallowExplctWriteConstraint:
 			d.DisallowExplicitWrite = true
-			fmt.Println("set true1")
 		default:
 			return nil, errors.AssertionFailedf("unexpected column qualification: %T", c)
 		}
