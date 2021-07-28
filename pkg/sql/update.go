@@ -420,6 +420,9 @@ func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 // checks.
 func enforceLocalColumnConstraints(row tree.Datums, cols []catalog.Column) error {
 	for i, col := range cols {
+		if col.IsDisallowedForExplicitWrite() {
+			return sqlerrors.NewNonNullViolationError(col.GetName() + "hello")
+		}
 		if !col.IsNullable() && row[i] == tree.DNull {
 			return sqlerrors.NewNonNullViolationError(col.GetName())
 		}
