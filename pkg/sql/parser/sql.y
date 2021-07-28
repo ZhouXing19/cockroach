@@ -6680,6 +6680,11 @@ col_qualification_elem:
  {
     $$.val = &tree.ColumnComputedDef{Expr: $3.expr(), Virtual: true}
  }
+|generated_as IDENTITY
+{
+		sqllex.Error("hello from generaged always as identity")
+		return 1
+}
 | generated_as error
  {
     sqllex.Error("use AS ( <expr> ) STORED or AS ( <expr> ) VIRTUAL")
