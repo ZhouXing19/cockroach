@@ -803,7 +803,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 %token <str> NONE NON_VOTERS NORMAL NOT NOTHING NOTNULL NOVIEWACTIVITY NOWAIT NULL NULLIF NULLS NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
-%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OWNER OPERATOR
+%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OVERRIDING OWNED OWNER OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PHYSICAL PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLYGON POLYGONM POLYGONZ POLYGONZM
@@ -853,7 +853,7 @@ func (u *sqlSymUnion) alterDefaultPrivilegesTargetObject() tree.AlterDefaultPriv
 // needed to make the grammar LALR(1). GENERATED_ALWAYS is needed to support
 // the Postgres syntax for computed columns along with our family related
 // extensions (CREATE FAMILY/CREATE FAMILY family_name).
-%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS
+%token NOT_LA NULLS_LA WITH_LA AS_LA GENERATED_ALWAYS OVERRIDING_SYSTEM_VALUE
 
 %union {
   id    int32
@@ -6706,6 +6706,8 @@ generated_as:
   AS {}
 | GENERATED_ALWAYS ALWAYS AS {}
 
+overriding_system_value:
+OVERRIDING_SYSTEM_VALUE SYSTEM VALUE {}
 
 index_def:
   INDEX opt_index_name '(' index_params ')' opt_hash_sharded opt_storing opt_interleave opt_partition_by_index opt_with_storage_parameter_list opt_where_clause
@@ -8517,6 +8519,7 @@ opt_equal:
 // %Text:
 // INSERT INTO <tablename> [[AS] <name>] [( <colnames...> )]
 //        <selectclause>
+//				[OVERRIDING SYSTEM VALUE]
 //        [ON CONFLICT {
 //          [( <colnames...> )] [WHERE <arbiter_predicate>] DO NOTHING |
 //          ( <colnames...> ) [WHERE <index_predicate>] DO UPDATE SET ... [WHERE <expr>]
