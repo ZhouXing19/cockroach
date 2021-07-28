@@ -574,6 +574,9 @@ func NewColumnTableDef(
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
+		case *DisallowExplctWriteConstraint:
+			d.DisallowExplicitWrite = true
+			fmt.Println("set true1")
 		default:
 			return nil, errors.AssertionFailedf("unexpected column qualification: %T", c)
 		}
@@ -749,7 +752,8 @@ func (UniqueConstraint) columnQualification()            {}
 func (*ColumnCheckConstraint) columnQualification()      {}
 func (*ColumnComputedDef) columnQualification()          {}
 func (*ColumnFKConstraint) columnQualification()         {}
-func (*ColumnFamilyConstraint) columnQualification()     {}
+func (*ColumnFamilyConstraint) columnQualification()        {}
+func (*DisallowExplctWriteConstraint) columnQualification() {}
 
 // ColumnCollation represents a COLLATE clause for a column.
 type ColumnCollation string
@@ -795,6 +799,8 @@ type ColumnFKConstraint struct {
 	Actions ReferenceActions
 	Match   CompositeKeyMatchMethod
 }
+
+type DisallowExplctWriteConstraint struct {}
 
 // ColumnComputedDef represents the description of a computed column.
 type ColumnComputedDef struct {

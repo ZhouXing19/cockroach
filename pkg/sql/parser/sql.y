@@ -6682,8 +6682,7 @@ col_qualification_elem:
  }
 |generated_as IDENTITY
 {
-		sqllex.Error("hello from generaged always as identity")
-		return 1
+		$$.val = &tree.DisallowExplctWriteConstraint{}
 }
 | generated_as error
  {
