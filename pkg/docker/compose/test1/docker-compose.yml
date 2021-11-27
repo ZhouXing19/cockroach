@@ -1,0 +1,12 @@
+version: '3'
+services:
+  roach1:
+    image: cockroachdb/cockroach-demo:latest
+    command: start-single-node --insecure --listen-addr=127.0.0.1 --http-addr=localhost:8080 --insecure --listening-url-file=new_fifo
+    environment:
+      - COCKROACH_DATABASE=hellobear
+      - COCKROACH_USER=jane
+    volumes:
+      - ./cockroach-data/roach1:/cockroach/cockroach-data
+      - ./docker-entrypoint-initdb.d/:/docker-entrypoint-initdb.d
+      - ../read_fifo.sh:/cockroach/read_fifo.sh

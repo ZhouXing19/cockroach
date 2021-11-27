@@ -29,7 +29,8 @@ func TestSqlQueries(t *testing.T) {
 
 	imageName := os.Getenv(imageEnvVar)
 	if imageName == "" {
-		t.Fatal(fmt.Errorf("docker image name is not preset in env var %s", imageEnvVar))
+		imageName = "cockroachdb/jane_cockroach:latest"
+		//t.Fatal(fmt.Errorf("docker image name is not preset in env var %s", imageEnvVar))
 	}
 
 	var dockerTests = []dockerTest{

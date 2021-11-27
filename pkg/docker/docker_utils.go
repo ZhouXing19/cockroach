@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	FifoFile              = "new_fifo"
-	buildContainerTimeout = 300
-	startContainerTimeout = 20
-	stopContainerTimeout  = 300
+	FifoFile                 = "new_fifo"
+	buildContainerTimeout    = 300
+	startContainerTimeout    = 20
+	stopContainerTimeout     = 300
+	cpFileToContainerTimeout = 30
 )
 
 // removeAllContainers stops and removes all existing containers.
@@ -84,6 +85,30 @@ func buildDockerContainer(dockerRunArgs []string, containerName string) error {
 
 	containerId := strings.TrimSpace(string(output))
 
+	cpFinished := make(chan error)
+
+	go func() {
+		_, err := exec.Command("docker", "cp", "./read_fifo.sh",
+			fmt.Sprintf("%s:cockroach/", containerName)).Output()
+		if err != nil {
+			cpFinished <- fmt.Errorf("cannot copy read_fifo to container: %v", err)
+			return
+		}
+		close(cpFinished)
+	}()
+
+	cpFileTimeout := time.After(cpFileToContainerTimeout * time.Second)
+
+	select {
+	case <-cpFileTimeout:
+		return fmt.Errorf("copy read_fifo to container timeout")
+	case err := <-cpFinished:
+		if err != nil {
+			return err
+		}
+		fmt.Println("successfully copied the file!")
+	}
+
 	timeout := time.Second * startContainerTimeout
 	for start := time.Now(); ; {
 		if time.Since(start) > timeout {
@@ -93,6 +118,7 @@ func buildDockerContainer(dockerRunArgs []string, containerName string) error {
 			}
 			return fmt.Errorf("timeout for container %s to start", containerId)
 		}
+
 		containerList, err := listContainers()
 		if err != nil {
 			return err
@@ -108,7 +134,12 @@ func buildDockerContainer(dockerRunArgs []string, containerName string) error {
 
 	// Check if the cockroach server is started by checking if the fifo is passed
 	// with the url.
-	finished := make(chan bool)
+	type outputStruct struct {
+		output string
+		err    error
+	}
+
+	finished := make(chan outputStruct)
 	go func() {
 		output, err = exec.Command(
 			"sh",
@@ -117,22 +148,22 @@ func buildDockerContainer(dockerRunArgs []string, containerName string) error {
 			"exec",
 			"-i",
 			containerName,
-			"cat",
+			"./read_fifo.sh",
 			FifoFile,
+			"30",
 		).Output()
-		finished <- true
+		finished <- outputStruct{string(output), err}
 	}()
 	timeout = time.Second * buildContainerTimeout
 	select {
 	case <-time.After(timeout):
-		fmt.Println("timed out for building container")
-		return nil
-	case <-finished:
-		if err != nil {
+		return fmt.Errorf("timeout for building container")
+	case commandOutput := <-finished:
+		if commandOutput.err != nil {
 			return fmt.Errorf("failed reading fifo file: %v", err)
 		}
 		fmt.Printf("successfully built container, "+
-			"with cockroach single node running on %s", string(output))
+			"with cockroach single node running on %s \n", output)
 
 		return nil
 	}
