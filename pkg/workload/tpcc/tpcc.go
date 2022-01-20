@@ -40,7 +40,6 @@ type tpcc struct {
 	seed             uint64
 	warehouses       int
 	activeWarehouses int
-	interleaved      bool
 	nowString        []byte
 	numConns         int
 
@@ -161,33 +160,33 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:                 {RuntimeOnly: true},
-			`mix`:                {RuntimeOnly: true},
-			`partitions`:         {RuntimeOnly: true},
-			`client-partitions`:  {RuntimeOnly: true},
-			`partition-affinity`: {RuntimeOnly: true},
-			`partition-strategy`: {RuntimeOnly: true},
-			`zones`:              {RuntimeOnly: true},
-			`active-warehouses`:  {RuntimeOnly: true},
-			`scatter`:            {RuntimeOnly: true},
-			`serializable`:       {RuntimeOnly: true},
-			`split`:              {RuntimeOnly: true},
-			`wait`:               {RuntimeOnly: true},
-			`workers`:            {RuntimeOnly: true},
-			`conns`:              {RuntimeOnly: true},
-			`idle-conns`:         {RuntimeOnly: true},
-			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
-			`region-local`:       {RuntimeOnly: true},
+			`db`:                       {RuntimeOnly: true},
+			`mix`:                      {RuntimeOnly: true},
+			`partitions`:               {RuntimeOnly: true},
+			`client-partitions`:        {RuntimeOnly: true},
+			`partition-affinity`:       {RuntimeOnly: true},
+			`partition-strategy`:       {RuntimeOnly: true},
+			`zones`:                    {RuntimeOnly: true},
+			`active-warehouses`:        {RuntimeOnly: true},
+			`scatter`:                  {RuntimeOnly: true},
+			`serializable`:             {RuntimeOnly: true},
+			`split`:                    {RuntimeOnly: true},
+			`wait`:                     {RuntimeOnly: true},
+			`workers`:                  {RuntimeOnly: true},
+			`conns`:                    {RuntimeOnly: true},
+			`idle-conns`:               {RuntimeOnly: true},
+			`expensive-checks`:         {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`local-warehouses`:         {RuntimeOnly: true},
+			`regions`:                  {RuntimeOnly: true},
+			`survival-goal`:            {RuntimeOnly: true},
+			`replicate-static-columns`: {RuntimeOnly: true},
+			`deprecated-fk-indexes`:    {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.BoolVar(&g.deprecatedFkIndexes, `deprecated-fk-indexes`, false, `Add deprecated foreign keys (needed when running against v20.1 or below clusters)`)
-		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
-		if err := g.Flags().MarkHidden("interleaved"); err != nil {
-			panic(errors.Wrap(err, "no interleaved flag?"))
-		}
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
@@ -228,6 +227,31 @@ var tpccMeta = workload.Meta{
 		g.nowString = []byte(`2006-01-02 15:04:05`)
 		return g
 	},
+}
+
+func queryDatabaseRegions(db *gosql.DB) (map[string]struct{}, error) {
+	regions := make(map[string]struct{})
+	rows, err := db.Query(`SELECT region FROM [SHOW REGIONS FROM DATABASE]`)
+	if err != nil {
+		return regions, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+	for rows.Next() {
+		if rows.Err() != nil {
+			return regions, err
+		}
+		var region string
+		if err := rows.Scan(&region); err != nil {
+			return regions, err
+		}
+		regions[region] = struct{}{}
+	}
+	if rows.Err() != nil {
+		return regions, err
+	}
+	return regions, nil
 }
 
 // Meta implements the Generator interface.
@@ -354,25 +378,8 @@ func (w *tpcc) Hooks() workload.Hooks {
 				return nil
 			}
 
-			regions := make(map[string]struct{})
-			rows, err := db.Query(`SELECT region FROM [SHOW REGIONS FROM DATABASE]`)
+			regions, err := queryDatabaseRegions(db)
 			if err != nil {
-				return err
-			}
-			defer func() {
-				_ = rows.Close()
-			}()
-			for rows.Next() {
-				if rows.Err() != nil {
-					return err
-				}
-				var region string
-				if err := rows.Scan(&region); err != nil {
-					return err
-				}
-				regions[region] = struct{}{}
-			}
-			if rows.Err() != nil {
 				return err
 			}
 
@@ -587,10 +594,6 @@ func (w *tpcc) Tables() []workload.Table {
 				w.separateColumnFamilies,
 				tpccDistrictColumnFamiliesSuffix,
 			),
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccDistrictSchemaInterleaveSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `d_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -609,10 +612,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: makeSchema(
 			tpccCustomerSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccCustomerSchemaInterleaveSuffix,
-			),
 			maybeAddColumnFamiliesSuffix(
 				w.separateColumnFamilies,
 				tpccCustomerColumnFamiliesSuffix,
@@ -651,10 +650,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order`,
 		Schema: makeSchema(
 			tpccOrderSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccOrderSchemaInterleaveSuffix,
-			),
 			maybeAddLocalityRegionalByRow(w.multiRegionCfg, `o_w_id`),
 		),
 		InitialRows: workload.BatchedTuples{
@@ -696,10 +691,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `stock`,
 		Schema: makeSchema(
 			tpccStockSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccStockSchemaInterleaveSuffix,
-			),
 			maybeAddFkSuffix(
 				w.deprecatedFkIndexes,
 				deprecatedTpccStockSchemaFkSuffix,
@@ -716,10 +707,6 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order_line`,
 		Schema: makeSchema(
 			tpccOrderLineSchemaBase,
-			maybeAddInterleaveSuffix(
-				w.interleaved,
-				tpccOrderLineSchemaInterleaveSuffix,
-			),
 			maybeAddFkSuffix(
 				w.deprecatedFkIndexes,
 				deprecatedTpccOrderLineSchemaFkSuffix,
@@ -790,7 +777,7 @@ func (w *tpcc) Ops(
 	}
 	var partitionDBs [][]*workload.MultiConnPool
 	if w.clientPartitions > 0 {
-		// Client partitons simply emulates the behavior of data partitions
+		// Client partitions simply emulates the behavior of data partitions
 		// w/r/t database connections, though all of the connections will
 		// be for the same partition.
 		partitionDBs = make([][]*workload.MultiConnPool, w.clientPartitions)
