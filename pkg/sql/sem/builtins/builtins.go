@@ -2819,6 +2819,47 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"overlaps": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categoryDateAndTime,
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"s1", types.Any},
+				{"e1", types.Any},
+				{"s1", types.Any},
+				{"e2", types.Any},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				validatedArgs, err := validForOverlaps(args)
+				if err != nil {
+					return nil, err
+				}
+				return checkIfDateTimeOverlap(ctx, validatedArgs)
+			},
+		},
+
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"t1", types.AnyTuple},
+				{"t2", types.AnyTuple},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				t1, t2 := args[0], args[1]
+				t1Lst, t2Lst := t1.(*tree.DTuple).D, t2.(*tree.DTuple).D
+				is1, ie1, is2, ie2 := t1Lst[0], t1Lst[1], t2Lst[0], t2Lst[1]
+				validatedArgs, err := validForOverlaps([]tree.Datum{is1, ie1, is2, ie2})
+				if err != nil {
+					return nil, err
+				}
+				return checkIfDateTimeOverlap(ctx, validatedArgs)
+			},
+		},
+	),
+
 	"extract":   extractBuiltin,
 	"date_part": extractBuiltin,
 
@@ -9026,4 +9067,148 @@ func prettyStatement(p tree.PrettyCfg, stmt string) (string, error) {
 		formattedStmt.WriteString("\n")
 	}
 	return formattedStmt.String(), nil
+}
+
+func checkIfDateTimeOverlap(ctx *tree.EvalContext, args []tree.Datum) (tree.Datum, error) {
+
+	if len(args) != 4 {
+		return nil, errors.New("must provide exactly 4 args for overlaps syntax")
+	}
+
+	is1, ie1, is2, ie2 := args[0], args[1], args[2], args[3]
+
+	is1IsNull := is1 == tree.DNull
+	ie1IsNull := ie1 == tree.DNull
+	is2IsNull := is2 == tree.DNull
+	ie2IsNull := ie2 == tree.DNull
+
+	if is1IsNull {
+		if ie1IsNull {
+			return tree.DNull, nil
+		}
+		is1 = ie1
+		ie1IsNull = true
+	} else if !ie1IsNull {
+		res, err := is1.CompareError(ctx, is2)
+		if err != nil {
+			return nil, err
+		}
+		// If is1 > ie1, swap.
+		if res > 0 {
+			is1, ie1 = ie1, is1
+		}
+	}
+
+	if is2IsNull {
+		if ie2IsNull {
+			return tree.DNull, nil
+		}
+		is2 = ie2
+		ie2IsNull = true
+	} else if !ie2IsNull {
+		res, err := is2.CompareError(ctx, is2)
+		if err != nil {
+			return nil, err
+		}
+		// If is2 > ie2, swap.
+		if res > 0 {
+			is2, ie2 = ie2, is2
+		}
+	}
+
+	compIs1Is2, err := is1.CompareError(ctx, is2)
+	if err != nil {
+		return nil, err
+	}
+	switch compIs1Is2 {
+	case 1:
+		if ie2IsNull {
+			return tree.DNull, nil
+		}
+		compIs1Ie2, err := is1.CompareError(ctx, ie2)
+		if err != nil {
+			return nil, err
+		}
+		if compIs1Ie2 < 0 {
+			return tree.DBoolTrue, nil
+		}
+		if ie1IsNull {
+			return tree.DNull, nil
+		}
+		return tree.DBoolFalse, nil
+	case -1:
+
+		if ie1IsNull {
+			return tree.DNull, nil
+		}
+		compIs2Ie1, err := is2.CompareError(ctx, ie1)
+		if err != nil {
+			return nil, err
+		}
+		if compIs2Ie1 < 0 {
+			return tree.DBoolTrue, nil
+		}
+		if ie2IsNull {
+			return tree.DNull, nil
+		}
+
+		return tree.DBoolFalse, nil
+
+	default:
+		if ie1IsNull || ie2IsNull {
+			return tree.DNull, nil
+		}
+		return tree.DBoolTrue, nil
+	}
+
+}
+
+func validForOverlaps(args []tree.Datum) (res []tree.Datum, err error) {
+	if len(args) != 4 {
+		return nil, errors.New("must provide 4 args for the overlaps function")
+	}
+
+	for i, d := range args {
+		if d == tree.DNull {
+			res = append(res, d)
+			continue
+		}
+		switch typ := d.(type) {
+		case *tree.DDate, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DTime, *tree.DTimeTZ:
+			res = append(res, d)
+		case *tree.DInterval:
+			if i == 0 || i == 2 {
+				return nil, errors.New("the first and the third args must be timestamp")
+			} else {
+				is, err := normalizeToTime(args[i-1])
+				if err != nil {
+					return nil, err
+				}
+				ie, err := tree.MakeDTimestamp(duration.Add(is, d.(*tree.DInterval).Duration), time.Microsecond)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, ie)
+			}
+		default:
+			return nil, errors.Newf("type %v is not supported for the overlap syntax", typ)
+		}
+	}
+	return res, nil
+}
+
+// normalizeToTime normalize the tree.Datum to time.Time
+func normalizeToTime(d tree.Datum) (time.Time, error) {
+	switch d.(type) {
+	case *tree.DDate:
+		return d.(*tree.DDate).ToTime()
+	case *tree.DTimestamp:
+		return d.(*tree.DTimestamp).Time, nil
+	case *tree.DTimestampTZ:
+		return d.(*tree.DTimestampTZ).Time, nil
+	case *tree.DTime:
+		return timeofday.TimeOfDay(*d.(*tree.DTime)).ToTime(), nil
+	default:
+		return time.Time{}, errors.New("d cannot be converted to time.Time")
+	}
 }
