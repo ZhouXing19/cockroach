@@ -332,8 +332,9 @@ func (s *drainServer) drainClients(
 		log.Ops.Warningf(ctx, "error showing alive SQL connections: %v", err)
 	}
 
-	// Wait for drainUnreadyWait. This will fail load balancer checks and
-	// delay draining so that client traffic can move off this node.
+	// Wait the duration of drainWait.
+	// This will fail load balancer checks and delay draining so that client
+	// traffic can move off this node.
 	// Note delay only happens on first call to drain.
 	if shouldDelayDraining {
 		drainWaitDuration := drainWait.Get(&s.sqlServer.execCfg.Settings.SV)
