@@ -56,6 +56,7 @@ func (p *planner) CommentOnDatabase(
 			ctx,
 			p.txn,
 			p.SessionData(),
+			&ExtraTxnState{p.Descriptors()},
 		),
 	}, nil
 }

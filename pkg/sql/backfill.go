@@ -156,7 +156,7 @@ func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			// We need to re-create the evalCtx since the txn may retry.
-			ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()))
+			ie := sc.ieFactory(ctx, NewFakeSessionData(sc.execCfg.SV()), nil)
 			return retryable(ctx, txn, ie)
 		})
 	}
@@ -728,7 +728,7 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
@@ -737,12 +737,12 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData()), desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData(), &ExtraTxnState{evalCtx.Descs}), desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2324,7 +2324,9 @@ func runSchemaChangesInTxn(
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
 					ctx, &planner.semaCtx, planner.ExecCfg().InternalExecutorFactory,
-					planner.SessionData(), tableDesc, planner.txn, check.Expr,
+					planner.SessionData(), &ExtraTxnState{
+						descs: planner.Descriptors(),
+					}, tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
 				}
@@ -2423,6 +2425,7 @@ func validateCheckInTxn(
 	semaCtx *tree.SemaContext,
 	ief sqlutil.SessionBoundInternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
+	extraTxnState *ExtraTxnState,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	checkExpr string,
@@ -2431,7 +2434,7 @@ func validateCheckInTxn(
 	if tableDesc.Version > tableDesc.ClusterVersion().Version {
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
-	ie := ief(ctx, sessionData)
+	ie := ief(ctx, sessionData, extraTxnState)
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateCheckExpr(ctx, semaCtx, sessionData, checkExpr, tableDesc, ie, txn)
 	})
@@ -2484,7 +2487,7 @@ func validateFkInTxn(
 			targetTable = syntheticTable
 		}
 	}
-	ie := ief(ctx, sd)
+	ie := ief(ctx, sd, &ExtraTxnState{descsCol})
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 	})

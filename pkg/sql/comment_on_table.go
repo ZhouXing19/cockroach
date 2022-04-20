@@ -56,6 +56,7 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 			ctx,
 			p.txn,
 			p.SessionData(),
+			&ExtraTxnState{p.Descriptors()},
 		),
 	}, nil
 }

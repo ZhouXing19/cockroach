@@ -183,7 +183,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	metadataUpdater := p.ExecCfg().DescMetadaUpdaterFactory.NewMetadataUpdater(
 		ctx,
 		p.txn,
-		p.SessionData())
+		p.SessionData(),
+		&ExtraTxnState{p.Descriptors()})
 	err := metadataUpdater.DeleteDescriptorComment(
 		int64(n.dbDesc.GetID()),
 		0,

@@ -632,6 +632,6 @@ func removeMatchingReferences(
 
 func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
 	return p.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
-		ctx, p.Txn(), p.SessionData(),
+		ctx, p.Txn(), p.SessionData(), &ExtraTxnState{p.Descriptors()},
 	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
 }

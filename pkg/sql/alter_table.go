@@ -544,8 +544,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 				if err := validateCheckInTxn(
-					params.ctx, &params.p.semaCtx, params.ExecCfg().InternalExecutorFactory,
-					params.SessionData(), n.tableDesc, params.p.Txn(), ck.Expr,
+					params.ctx,
+					&params.p.semaCtx,
+					params.ExecCfg().InternalExecutorFactory,
+					params.SessionData(),
+					&ExtraTxnState{
+						descs: params.Desc(),
+					},
+					n.tableDesc,
+					params.p.Txn(),
+					ck.Expr,
 				); err != nil {
 					return err
 				}
@@ -597,7 +605,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 					if err := validateUniqueWithoutIndexConstraintInTxn(
 						params.ctx, params.ExecCfg().InternalExecutorFactory(
-							params.ctx, params.SessionData(),
+							params.ctx, params.SessionData(), &ExtraTxnState{
+								descs: params.Desc(),
+							},
 						), n.tableDesc, params.p.Txn(), name,
 					); err != nil {
 						return err

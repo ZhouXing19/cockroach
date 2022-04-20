@@ -74,6 +74,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 			ctx,
 			p.txn,
 			p.SessionData(),
+			&ExtraTxnState{p.Descriptors()},
 		),
 	}, nil
 }

@@ -53,6 +53,7 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 			ctx,
 			p.txn,
 			p.SessionData(),
+			&ExtraTxnState{p.Descriptors()},
 		)}, nil
 }
 

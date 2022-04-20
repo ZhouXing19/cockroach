@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -49,6 +50,11 @@ func (r *runParams) EvalContext() *tree.EvalContext {
 // SessionData gives convenient access to the runParam's SessionData.
 func (r *runParams) SessionData() *sessiondata.SessionData {
 	return r.extendedEvalCtx.SessionData()
+}
+
+// Desc gives the convenient access to the runParam's descriptor collections.
+func (r *runParams) Desc() *descs.Collection {
+	return r.extendedEvalCtx.Descs
 }
 
 // ExecCfg gives convenient access to the runParam's ExecutorConfig.

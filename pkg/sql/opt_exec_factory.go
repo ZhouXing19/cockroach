@@ -1160,6 +1160,7 @@ func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.N
 	ie := ef.planner.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
 		ef.planner.EvalContext().Context,
 		ef.planner.SessionData(),
+		&ExtraTxnState{descs: ef.planner.Descriptors()},
 	)
 	c := makeStmtEnvCollector(ef.planner.EvalContext().Context, ie.(*InternalExecutor))
 

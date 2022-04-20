@@ -71,6 +71,8 @@ type InternalExecutor struct {
 	//
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
+
+	extraTxnState ExtraTxnState
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -123,6 +125,10 @@ func MakeInternalExecutor(
 func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData) {
 	ie.s.populateMinimalSessionData(sessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
+}
+
+func (ie *InternalExecutor) SetExtraTxnState(ts *ExtraTxnState) {
+	ie.extraTxnState.descs = ts.descs
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It
@@ -182,6 +188,7 @@ func (ie *InternalExecutor) initConnEx(
 			ie.memMetrics,
 			&ie.s.InternalMetrics,
 			applicationStats,
+			&ie.extraTxnState,
 		)
 	} else {
 		ex = ie.s.newConnExecutorWithTxn(
@@ -195,6 +202,7 @@ func (ie *InternalExecutor) initConnEx(
 			txn,
 			ie.syntheticDescriptors,
 			applicationStats,
+			&ie.extraTxnState,
 		)
 	}
 

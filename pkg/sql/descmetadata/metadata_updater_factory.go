@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -48,7 +49,10 @@ func NewMetadataUpdaterFactory(
 // create / destroy metadata (i.e. comments) associated with different
 // schema objects.
 func (mf MetadataUpdaterFactory) NewMetadataUpdater(
-	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	extraTxnState *sql.ExtraTxnState,
 ) scexec.DescriptorMetadataUpdater {
 	// Unfortunately, we can't use the session data unmodified, previously the
 	// code modifying this metadata would use a circular executor that would ignore
@@ -58,7 +62,7 @@ func (mf MetadataUpdaterFactory) NewMetadataUpdater(
 	modifiedSessionData.ExperimentalDistSQLPlanningMode = sessiondatapb.ExperimentalDistSQLPlanningOn
 	return metadataUpdater{
 		txn:               txn,
-		ie:                mf.ieFactory(ctx, modifiedSessionData),
+		ie:                mf.ieFactory(ctx, modifiedSessionData, extraTxnState),
 		collectionFactory: mf.collectionFactory,
 		cacheEnabled:      sessioninit.CacheEnabled.Get(mf.settings),
 	}

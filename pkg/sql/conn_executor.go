@@ -664,6 +664,7 @@ func (s *Server) SetupConn(
 	ex := s.newConnExecutor(
 		ctx, sdMutIterator, stmtBuf, clientComm, memMetrics, &s.Metrics,
 		s.sqlStats.GetApplicationStats(sd.ApplicationName),
+		nil,
 	)
 	return ConnectionHandler{ex}, nil
 }
@@ -817,6 +818,7 @@ func (s *Server) newConnExecutor(
 	memMetrics MemoryMetrics,
 	srvMetrics *Metrics,
 	applicationStats sqlstats.ApplicationStats,
+	exTxnState *ExtraTxnState,
 ) *connExecutor {
 	// Create the various monitors.
 	// The session monitors are started in activate().
@@ -918,7 +920,14 @@ func (s *Server) newConnExecutor(
 		portals:   make(map[string]PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
-	ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+	if exTxnState != nil {
+		if exTxnState.descs != nil {
+			ex.extraTxnState.descCollection = *exTxnState.descs
+		} else {
+			ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
+		}
+	}
+
 	ex.extraTxnState.txnRewindPos = -1
 	ex.extraTxnState.schemaChangeJobRecords = make(map[descpb.ID]*jobs.Record)
 	ex.queryCancelKey = pgwirecancel.MakeBackendKeyData(ex.rng, ex.server.cfg.NodeID.SQLInstanceID())
@@ -960,6 +969,7 @@ func (s *Server) newConnExecutorWithTxn(
 	txn *kv.Txn,
 	syntheticDescs []catalog.Descriptor,
 	applicationStats sqlstats.ApplicationStats,
+	exTxnState *ExtraTxnState,
 ) *connExecutor {
 	ex := s.newConnExecutor(
 		ctx,
@@ -969,6 +979,7 @@ func (s *Server) newConnExecutorWithTxn(
 		memMetrics,
 		srvMetrics,
 		applicationStats,
+		exTxnState,
 	)
 	if txn.Type() == kv.LeafTxn {
 		// If the txn is a leaf txn it is not allowed to perform mutations. For

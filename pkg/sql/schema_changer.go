@@ -141,7 +141,7 @@ func NewSchemaChangerForTesting(
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
 		ieFactory: func(
-			ctx context.Context, sd *sessiondata.SessionData,
+			ctx context.Context, sd *sessiondata.SessionData, extraTxnState *ExtraTxnState,
 		) sqlutil.InternalExecutor {
 			return execCfg.InternalExecutor
 		},
@@ -1715,7 +1715,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 		metaDataUpdater := sc.execCfg.DescMetadaUpdaterFactory.NewMetadataUpdater(
 			ctx,
 			txn,
-			NewFakeSessionData(&sc.settings.SV))
+			NewFakeSessionData(&sc.settings.SV),
+			&ExtraTxnState{descsCol})
 		for _, comment := range commentsToDelete {
 			err := metaDataUpdater.DeleteDescriptorComment(
 				comment.id,
@@ -2529,8 +2530,8 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-				return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData, extraTxnState *ExtraTxnState) sqlutil.InternalExecutor {
+				return r.job.MakeSessionBoundInternalExecutor(ctx, sd, extraTxnState)
 			},
 			metrics: p.ExecCfg().SchemaChangerMetrics,
 		}
@@ -2717,8 +2718,8 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
-			return r.job.MakeSessionBoundInternalExecutor(ctx, sd)
+		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData, extraTxnState *ExtraTxnState) sqlutil.InternalExecutor {
+			return r.job.MakeSessionBoundInternalExecutor(ctx, sd, extraTxnState)
 		},
 	}
 
