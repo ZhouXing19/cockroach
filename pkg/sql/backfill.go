@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -728,7 +729,7 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
@@ -737,12 +738,12 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData(), &ExtraTxnState{evalCtx.Descs}), desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{evalCtx.Descs}), desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2324,8 +2325,8 @@ func runSchemaChangesInTxn(
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := validateCheckInTxn(
 					ctx, &planner.semaCtx, planner.ExecCfg().InternalExecutorFactory,
-					planner.SessionData(), &ExtraTxnState{
-						descs: planner.Descriptors(),
+					planner.SessionData(), &sqlextratxnstate.ExtraTxnState{
+						Descs: planner.Descriptors(),
 					}, tableDesc, planner.txn, check.Expr,
 				); err != nil {
 					return err
@@ -2425,7 +2426,7 @@ func validateCheckInTxn(
 	semaCtx *tree.SemaContext,
 	ief sqlutil.SessionBoundInternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
-	extraTxnState *ExtraTxnState,
+	extraTxnState *sqlextratxnstate.ExtraTxnState,
 	tableDesc *tabledesc.Mutable,
 	txn *kv.Txn,
 	checkExpr string,
@@ -2487,7 +2488,7 @@ func validateFkInTxn(
 			targetTable = syntheticTable
 		}
 	}
-	ie := ief(ctx, sd, &ExtraTxnState{descsCol})
+	ie := ief(ctx, sd, &sqlextratxnstate.ExtraTxnState{descsCol})
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 	})

@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -881,7 +882,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// SessionBoundInternalExecutorFactory. The same applies for setting a
 	// SessionBoundInternalExecutor on the job registry.
 	ieFactory := func(
-		ctx context.Context, sessionData *sessiondata.SessionData, extraTxnState *sql.ExtraTxnState,
+		ctx context.Context, sessionData *sessiondata.SessionData, extraTxnState *sqlextratxnstate.ExtraTxnState,
 	) sqlutil.InternalExecutor {
 		ie := sql.MakeInternalExecutor(
 			ctx,

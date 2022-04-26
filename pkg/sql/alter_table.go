@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -548,8 +549,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					&params.p.semaCtx,
 					params.ExecCfg().InternalExecutorFactory,
 					params.SessionData(),
-					&ExtraTxnState{
-						descs: params.Desc(),
+					&sqlextratxnstate.ExtraTxnState{
+						Descs: params.Desc(),
 					},
 					n.tableDesc,
 					params.p.Txn(),
@@ -605,8 +606,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 					if err := validateUniqueWithoutIndexConstraintInTxn(
 						params.ctx, params.ExecCfg().InternalExecutorFactory(
-							params.ctx, params.SessionData(), &ExtraTxnState{
-								descs: params.Desc(),
+							params.ctx, params.SessionData(), &sqlextratxnstate.ExtraTxnState{
+								Descs: params.Desc(),
 							},
 						), n.tableDesc, params.p.Txn(), name,
 					); err != nil {

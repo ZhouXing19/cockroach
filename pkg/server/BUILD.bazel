@@ -184,6 +184,7 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
+        "//pkg/sql/sqlextratxnstate",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instanceprovider",
         "//pkg/sql/sqlliveness",

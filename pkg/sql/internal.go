@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -72,7 +73,7 @@ type InternalExecutor struct {
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
 
-	extraTxnState ExtraTxnState
+	extraTxnState sqlextratxnstate.ExtraTxnState
 }
 
 // WithSyntheticDescriptors sets the synthetic descriptors before running the
@@ -127,8 +128,8 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
-func (ie *InternalExecutor) SetExtraTxnState(ts *ExtraTxnState) {
-	ie.extraTxnState.descs = ts.descs
+func (ie *InternalExecutor) SetExtraTxnState(ts *sqlextratxnstate.ExtraTxnState) {
+	ie.extraTxnState.Descs = ts.Descs
 }
 
 // initConnEx creates a connExecutor and runs it on a separate goroutine. It

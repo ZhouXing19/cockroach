@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -540,7 +541,7 @@ func (p *planner) dropIndexByName(
 		ctx,
 		p.txn,
 		p.SessionData(),
-		&ExtraTxnState{p.Descriptors()},
+		&sqlextratxnstate.ExtraTxnState{p.Descriptors()},
 	)
 	if err := commentUpdater.DeleteDescriptorComment(
 		int64(tableDesc.ID), int64(idxDesc.ID), keys.IndexCommentType); err != nil {

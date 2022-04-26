@@ -15,12 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
@@ -52,7 +52,7 @@ func (mf MetadataUpdaterFactory) NewMetadataUpdater(
 	ctx context.Context,
 	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
-	extraTxnState *sql.ExtraTxnState,
+	extraTxnState *sqlextratxnstate.ExtraTxnState,
 ) scexec.DescriptorMetadataUpdater {
 	// Unfortunately, we can't use the session data unmodified, previously the
 	// code modifying this metadata would use a circular executor that would ignore

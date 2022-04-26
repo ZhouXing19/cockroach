@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -29,7 +30,7 @@ import (
 func (p *planner) ResolveOIDFromString(
 	ctx context.Context, resultType *types.T, toResolve *tree.DString,
 ) (*tree.DOid, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &ExtraTxnState{descs: p.Descriptors()})
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()})
 	return resolveOID(
 		ctx, p.Txn(),
 		ie,
@@ -41,7 +42,7 @@ func (p *planner) ResolveOIDFromString(
 func (p *planner) ResolveOIDFromOID(
 	ctx context.Context, resultType *types.T, toResolve *tree.DOid,
 ) (*tree.DOid, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &ExtraTxnState{descs: p.Descriptors()})
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()})
 	return resolveOID(
 		ctx, p.Txn(),
 		ie,

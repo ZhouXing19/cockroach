@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -61,7 +62,7 @@ func (p *planner) CommentOnConstraint(
 			ctx,
 			p.txn,
 			p.SessionData(),
-			&ExtraTxnState{p.Descriptors()},
+			&sqlextratxnstate.ExtraTxnState{p.Descriptors()},
 		),
 	}, nil
 

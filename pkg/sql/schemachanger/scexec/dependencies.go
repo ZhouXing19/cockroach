@@ -19,11 +19,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
@@ -293,6 +293,6 @@ type DescriptorMetadataUpdater interface {
 type DescriptorMetadataUpdaterFactory interface {
 	// NewMetadataUpdater creates a new DescriptorMetadataUpdater.
 	NewMetadataUpdater(
-		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData, extraTxnState *sql.ExtraTxnState,
+		ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData, extraTxnState *sqlextratxnstate.ExtraTxnState,
 	) DescriptorMetadataUpdater
 }

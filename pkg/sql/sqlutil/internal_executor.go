@@ -14,11 +14,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 )
 
 // InternalExecutor is meant to be used by layers below SQL in the system that
@@ -195,7 +195,7 @@ type InternalRows interface {
 // SessionBoundInternalExecutorFactory is a function that produces a "session
 // bound" internal executor.
 type SessionBoundInternalExecutorFactory func(
-	context.Context, *sessiondata.SessionData, *sql.ExtraTxnState,
+	context.Context, *sessiondata.SessionData, *sqlextratxnstate.ExtraTxnState,
 ) InternalExecutor
 
 // InternalExecFn is the type of functions that operates using an internalExecutor.

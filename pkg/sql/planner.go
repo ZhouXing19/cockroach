@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -876,7 +877,7 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &ExtraTxnState{descs: p.Descriptors()})
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()})
 	return ie.QueryRowEx(ctx, opName, txn, override, stmt, qargs...)
 }
 
@@ -894,7 +895,7 @@ func (p *planner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.InternalRows, error) {
-	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &ExtraTxnState{descs: p.Descriptors()})
+	ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()})
 	rows, err := ie.QueryIteratorEx(ctx, opName, txn, override, stmt, qargs...)
 	return rows.(tree.InternalRows), err
 }

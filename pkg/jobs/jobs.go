@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -757,7 +757,7 @@ func (j *Job) FractionCompleted() float32 {
 // sessionBoundInternalExecutorFactory for a more detailed explanation of why
 // this exists.
 func (j *Job) MakeSessionBoundInternalExecutor(
-	ctx context.Context, sd *sessiondata.SessionData, extraTxnState *sql.ExtraTxnState,
+	ctx context.Context, sd *sessiondata.SessionData, extraTxnState *sqlextratxnstate.ExtraTxnState,
 ) sqlutil.InternalExecutor {
 	return j.registry.sessionBoundInternalExecutorFactory(ctx, sd, extraTxnState)
 }

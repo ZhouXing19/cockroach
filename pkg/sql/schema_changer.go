@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -141,7 +142,7 @@ func NewSchemaChangerForTesting(
 		// Note that this doesn't end up actually being session-bound but that's
 		// good enough for testing.
 		ieFactory: func(
-			ctx context.Context, sd *sessiondata.SessionData, extraTxnState *ExtraTxnState,
+			ctx context.Context, sd *sessiondata.SessionData, extraTxnState *sqlextratxnstate.ExtraTxnState,
 		) sqlutil.InternalExecutor {
 			return execCfg.InternalExecutor
 		},
@@ -1716,7 +1717,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			ctx,
 			txn,
 			NewFakeSessionData(&sc.settings.SV),
-			&ExtraTxnState{descsCol})
+			&sqlextratxnstate.ExtraTxnState{descsCol})
 		for _, comment := range commentsToDelete {
 			err := metaDataUpdater.DeleteDescriptorComment(
 				comment.id,
@@ -2530,7 +2531,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 			clock:                p.ExecCfg().Clock,
 			settings:             p.ExecCfg().Settings,
 			execCfg:              p.ExecCfg(),
-			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData, extraTxnState *ExtraTxnState) sqlutil.InternalExecutor {
+			ieFactory: func(ctx context.Context, sd *sessiondata.SessionData, extraTxnState *sqlextratxnstate.ExtraTxnState) sqlutil.InternalExecutor {
 				return r.job.MakeSessionBoundInternalExecutor(ctx, sd, extraTxnState)
 			},
 			metrics: p.ExecCfg().SchemaChangerMetrics,
@@ -2718,7 +2719,7 @@ func (r schemaChangeResumer) OnFailOrCancel(ctx context.Context, execCtx interfa
 		clock:                p.ExecCfg().Clock,
 		settings:             p.ExecCfg().Settings,
 		execCfg:              p.ExecCfg(),
-		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData, extraTxnState *ExtraTxnState) sqlutil.InternalExecutor {
+		ieFactory: func(ctx context.Context, sd *sessiondata.SessionData, extraTxnState *sqlextratxnstate.ExtraTxnState) sqlutil.InternalExecutor {
 			return r.job.MakeSessionBoundInternalExecutor(ctx, sd, extraTxnState)
 		},
 	}

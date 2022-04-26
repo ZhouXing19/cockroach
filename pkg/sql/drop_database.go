@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -184,7 +185,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		p.txn,
 		p.SessionData(),
-		&ExtraTxnState{p.Descriptors()})
+		&sqlextratxnstate.ExtraTxnState{p.Descriptors()})
 	err := metadataUpdater.DeleteDescriptorComment(
 		int64(n.dbDesc.GetID()),
 		0,

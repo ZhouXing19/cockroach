@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 )
 
 type commentOnSchemaNode struct {
@@ -74,7 +75,7 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 			ctx,
 			p.txn,
 			p.SessionData(),
-			&ExtraTxnState{p.Descriptors()},
+			&sqlextratxnstate.ExtraTxnState{p.Descriptors()},
 		),
 	}, nil
 }

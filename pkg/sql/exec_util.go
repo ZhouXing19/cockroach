@@ -1309,11 +1309,6 @@ type ExecutorConfig struct {
 	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
-// ExtraTxnState holds state to initialize an InternalExecutor with.
-type ExtraTxnState struct {
-	descs *descs.Collection
-}
-
 // UpdateVersionSystemSettingHook provides a callback that allows us
 // update the cluster version inside the system.settings table. This hook
 // is aimed at mainly updating tenant pods, which will currently skip over

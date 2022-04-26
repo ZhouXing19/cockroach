@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/errors"
 )
 
@@ -105,7 +106,7 @@ func (n *unsplitAllNode) startExec(params runParams) error {
 	if n.index.GetID() != n.tableDesc.GetPrimaryIndexID() {
 		indexName = n.index.GetName()
 	}
-	ie := params.p.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData(), &ExtraTxnState{descs: params.Desc()})
+	ie := params.p.ExecCfg().InternalExecutorFactory(params.ctx, params.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: params.Desc()})
 	it, err := ie.QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
 		statement,

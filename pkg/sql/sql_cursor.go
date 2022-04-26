@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -47,7 +48,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
-			ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &ExtraTxnState{descs: p.Descriptors()})
+			ie := p.ExecCfg().InternalExecutorFactory(ctx, p.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()})
 			cursorName := s.Name.String()
 			if cursor, _ := p.sqlCursors.getCursor(cursorName); cursor != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", cursorName)
