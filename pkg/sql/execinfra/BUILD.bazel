@@ -45,6 +45,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/iefactory",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/rowinfra",

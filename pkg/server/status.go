@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -2332,16 +2333,14 @@ func (s *statusServer) HotRangesV2(
 	rangeReportMetas := make(map[uint32]hotRangeReportMeta)
 	var descrs []catalog.Descriptor
 	var err error
-	if err := s.sqlServer.distSQLServer.CollectionFactory.Txn(
-		ctx, s.sqlServer.internalExecutor, s.db,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			all, err := descriptors.GetAllDescriptors(ctx, txn)
-			if err != nil {
-				return err
-			}
-			descrs = all.OrderedDescriptors()
-			return nil
-		}); err != nil {
+	if err := cftxn.CollectionFactoryTxn(ctx, s.sqlServer.distSQLServer.CollectionFactory, s.sqlServer.internalExecutor, s.db, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		all, err := descriptors.GetAllDescriptors(ctx, txn)
+		if err != nil {
+			return err
+		}
+		descrs = all.OrderedDescriptors()
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 

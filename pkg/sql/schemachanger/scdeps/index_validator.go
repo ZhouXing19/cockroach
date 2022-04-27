@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -54,7 +55,7 @@ type indexValidator struct {
 	db                      *kv.DB
 	codec                   keys.SQLCodec
 	settings                *cluster.Settings
-	ieFactory               sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory               iefactory.SessionBoundInternalExecutorFactory
 	validateForwardIndexes  ValidateForwardIndexesFn
 	validateInvertedIndexes ValidateInvertedIndexesFn
 	newFakeSessionData      NewFakeSessionDataFn
@@ -108,7 +109,7 @@ func NewIndexValidator(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory iefactory.SessionBoundInternalExecutorFactory,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	newFakeSessionData NewFakeSessionDataFn,

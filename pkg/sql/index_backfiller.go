@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -31,12 +31,12 @@ import (
 // for use in the declarative schema changer.
 type IndexBackfillPlanner struct {
 	execCfg   *ExecutorConfig
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory iefactory.SessionBoundInternalExecutorFactory
 }
 
 // NewIndexBackfiller creates a new IndexBackfillPlanner.
 func NewIndexBackfiller(
-	execCfg *ExecutorConfig, ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	execCfg *ExecutorConfig, ieFactory iefactory.SessionBoundInternalExecutorFactory,
 ) *IndexBackfillPlanner {
 	return &IndexBackfillPlanner{execCfg: execCfg, ieFactory: ieFactory}
 }

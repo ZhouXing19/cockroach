@@ -922,8 +922,8 @@ func (s *Server) newConnExecutor(
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	if exTxnState != nil {
-		if exTxnState.descs != nil {
-			ex.extraTxnState.descCollection = *exTxnState.descs
+		if exTxnState.Descs != nil {
+			ex.extraTxnState.descCollection = *exTxnState.Descs
 		} else {
 			ex.extraTxnState.descCollection = s.cfg.CollectionFactory.MakeCollection(ctx, descs.NewTemporarySchemaProvider(sdMutIterator.sds), ex.sessionMon)
 		}

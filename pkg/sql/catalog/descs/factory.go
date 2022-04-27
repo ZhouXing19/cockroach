@@ -93,3 +93,23 @@ func (cf *CollectionFactory) NewCollection(
 	c := cf.MakeCollection(ctx, temporarySchemaProvider, nil /* monitor */)
 	return &c
 }
+
+// GetLeaseManager returns the collection factory's lease manager.
+func (cf *CollectionFactory) GetLeaseManager() *lease.Manager {
+	return cf.leaseMgr
+}
+
+// GetClusterSettings returns the collection factory's cluster settings.
+func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
+	return cf.settings
+}
+
+// GetSpanConfigSplitter returns the collection factory's span config splitter.
+func (cf *CollectionFactory) GetSpanConfigSplitter() spanconfig.Splitter {
+	return cf.spanConfigSplitter
+}
+
+// GetSpanConfigLimiter returns the collection factory's span config limiter.
+func (cf *CollectionFactory) GetSpanConfigLimiter() spanconfig.Limiter {
+	return cf.spanConfigLimiter
+}

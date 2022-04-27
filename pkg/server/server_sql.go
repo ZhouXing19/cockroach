@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/systabidresolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydratedtables"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -786,7 +787,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		GCJobNotifier:              gcJobNotifier,
 		RangeFeedFactory:           cfg.rangeFeedFactory,
 		CollectionFactory:          collectionFactory,
-		SystemTableIDResolver:      descs.MakeSystemTableIDResolver(collectionFactory, cfg.circularInternalExecutor, cfg.db),
+		SystemTableIDResolver:      systabidresolver.MakeSystemTableIDResolver(collectionFactory, cfg.circularInternalExecutor, cfg.db),
 	}
 
 	if sqlSchemaChangerTestingKnobs := cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

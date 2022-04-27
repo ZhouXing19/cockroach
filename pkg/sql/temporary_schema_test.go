@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -97,27 +98,23 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 
 	require.NoError(
 		t,
-		s.ExecutorConfig().(ExecutorConfig).CollectionFactory.Txn(
-			ctx,
-			s.InternalExecutor().(*InternalExecutor),
-			kvDB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				execCfg := s.ExecutorConfig().(ExecutorConfig)
-				defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
-				require.NoError(t, err)
-				err = cleanupSchemaObjects(
-					ctx,
-					execCfg.Settings,
-					txn,
-					descsCol,
-					execCfg.Codec,
-					s.InternalExecutor().(*InternalExecutor),
-					defaultDB,
-					tempSchemaName,
-				)
-				require.NoError(t, err)
-				return nil
-			}),
+		cftxn.CollectionFactoryTxn(ctx, s.ExecutorConfig().(ExecutorConfig).CollectionFactory, s.InternalExecutor().(*InternalExecutor), kvDB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+			execCfg := s.ExecutorConfig().(ExecutorConfig)
+			defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(ctx, txn, namesToID["defaultdb"])
+			require.NoError(t, err)
+			err = cleanupSchemaObjects(
+				ctx,
+				execCfg.Settings,
+				txn,
+				descsCol,
+				execCfg.Codec,
+				s.InternalExecutor().(*InternalExecutor),
+				defaultDB,
+				tempSchemaName,
+			)
+			require.NoError(t, err)
+			return nil
+		}),
 	)
 
 	ensureTemporaryObjectsAreDeleted(ctx, t, conn, tempSchemaName, tempNames)

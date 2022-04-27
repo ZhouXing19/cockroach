@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/descsutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -835,7 +835,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		inRetryBackoff = knobs.TwoVersionLeaseViolation
 	}
 
-	if err := descs.CheckSpanCountLimit(
+	if err := descsutil.CheckSpanCountLimit(
 		ctx,
 		&ex.extraTxnState.descCollection,
 		ex.server.cfg.SpanConfigSplitter,
@@ -845,7 +845,7 @@ func (ex *connExecutor) checkDescriptorTwoVersionInvariant(ctx context.Context) 
 		return err
 	}
 
-	retryErr, err := descs.CheckTwoVersionInvariant(
+	retryErr, err := descsutil.CheckTwoVersionInvariant(
 		ctx,
 		ex.server.cfg.Clock,
 		ex.server.cfg.InternalExecutor,

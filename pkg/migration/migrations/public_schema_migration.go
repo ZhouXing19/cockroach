@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -78,10 +79,9 @@ ORDER BY ns_db.id ASC;
 func createPublicSchemaForDatabase(
 	ctx context.Context, dbID descpb.ID, d migration.TenantDeps,
 ) error {
-	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			return createPublicSchemaDescriptor(ctx, txn, descriptors, dbID, d)
-		})
+	return cftxn.CollectionFactoryTxn(ctx, d.CollectionFactory, d.InternalExecutor, d.DB, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		return createPublicSchemaDescriptor(ctx, txn, descriptors, dbID, d)
+	})
 }
 
 func createPublicSchemaDescriptor(

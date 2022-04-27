@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -138,7 +139,7 @@ func readTableDescriptor(
 ) (catalog.TableDescriptor, error) {
 	var t catalog.TableDescriptor
 
-	if err := d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
+	if err := cftxn.CollectionFactoryTxn(ctx, d.CollectionFactory, d.InternalExecutor, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
 		t, err = descriptors.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{

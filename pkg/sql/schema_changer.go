@@ -36,11 +36,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -111,7 +113,7 @@ type SchemaChanger struct {
 	clock                *hlc.Clock
 	settings             *cluster.Settings
 	execCfg              *ExecutorConfig
-	ieFactory            sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory            iefactory.SessionBoundInternalExecutorFactory
 
 	// mvccCompliantAddIndex is set to true early in exec if we
 	// find that the schema change was created under the
@@ -560,7 +562,7 @@ func drainNamesForDescriptor(
 		}
 		return txn.Run(ctx, b)
 	}
-	return cf.Txn(ctx, ie, db, run)
+	return cftxn.CollectionFactoryTxn(ctx, cf, ie, db, run)
 }
 
 func startGCJob(
@@ -1304,7 +1306,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	var didUpdate bool
 	var depMutationJobs []jobspb.JobID
 	var otherJobIDs []jobspb.JobID
-	err := sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, func(
+	err := cftxn.CollectionFactoryTxn(ctx, sc.execCfg.CollectionFactory, sc.execCfg.InternalExecutor, sc.db, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		depMutationJobs = depMutationJobs[:0]
@@ -2410,7 +2412,7 @@ func (sc *SchemaChanger) txn(
 		}
 	}
 
-	return sc.execCfg.CollectionFactory.Txn(ctx, sc.execCfg.InternalExecutor, sc.db, f)
+	return cftxn.CollectionFactoryTxn(ctx, sc.execCfg.CollectionFactory, sc.execCfg.InternalExecutor, sc.db, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.

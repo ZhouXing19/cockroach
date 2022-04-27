@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -2424,7 +2425,7 @@ func runSchemaChangesInTxn(
 func validateCheckInTxn(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ief iefactory.SessionBoundInternalExecutorFactory,
 	sessionData *sessiondata.SessionData,
 	extraTxnState *sqlextratxnstate.ExtraTxnState,
 	tableDesc *tabledesc.Mutable,
@@ -2455,7 +2456,7 @@ func validateCheckInTxn(
 // reuse an existing kv.Txn safely.
 func validateFkInTxn(
 	ctx context.Context,
-	ief sqlutil.SessionBoundInternalExecutorFactory,
+	ief iefactory.SessionBoundInternalExecutorFactory,
 	sd *sessiondata.SessionData,
 	srcTable *tabledesc.Mutable,
 	txn *kv.Txn,

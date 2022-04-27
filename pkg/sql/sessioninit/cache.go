@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -121,7 +122,7 @@ func (a *Cache) GetAuthInfo(
 
 	var usersTableDesc catalog.TableDescriptor
 	var roleOptionsTableDesc catalog.TableDescriptor
-	err = f.Txn(ctx, ie, db, func(
+	err = cftxn.CollectionFactoryTxn(ctx, f, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		_, usersTableDesc, err = descriptors.GetImmutableTableByName(
@@ -293,7 +294,7 @@ func (a *Cache) GetDefaultSettings(
 ) (settingsEntries []SettingsCacheEntry, err error) {
 	var dbRoleSettingsTableDesc catalog.TableDescriptor
 	var databaseID descpb.ID
-	err = f.Txn(ctx, ie, db, func(
+	err = cftxn.CollectionFactoryTxn(ctx, f, ie, db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		_, dbRoleSettingsTableDesc, err = descriptors.GetImmutableTableByName(

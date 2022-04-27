@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -67,6 +68,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -88,7 +90,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -1306,7 +1307,7 @@ type ExecutorConfig struct {
 	// InternalExecutorFactory is used to create an InternalExecutor binded with
 	// SessionData and other ExtraTxnState.
 	// This is currently only for builtin functions where we need to execute sql.
-	InternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	InternalExecutorFactory iefactory.SessionBoundInternalExecutorFactory
 }
 
 // UpdateVersionSystemSettingHook provides a callback that allows us
@@ -3322,7 +3323,7 @@ func DescsTxn(
 	execCfg *ExecutorConfig,
 	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
 ) error {
-	return execCfg.CollectionFactory.Txn(ctx, execCfg.InternalExecutor, execCfg.DB, f)
+	return cftxn.CollectionFactoryTxn(ctx, execCfg.CollectionFactory, execCfg.InternalExecutor, execCfg.DB, f)
 }
 
 // TestingDescsTxn is a convenience function for running a transaction on

@@ -98,7 +98,7 @@ func (c collectionBackedDereferencer) DereferenceDescriptors(
 		fallbackRet, err := catkv.GetCrossReferencedDescriptorsForValidation(
 			ctx,
 			version,
-			c.tc.codec(),
+			c.tc.Codec(),
 			c.txn,
 			fallbackReqs,
 		)
@@ -154,7 +154,7 @@ func (c collectionBackedDereferencer) DereferenceDescriptorIDs(
 		// TODO(postamar): actually use the Collection here instead,
 		// either by calling the Collection's methods or by caching the results
 		// of this call in the Collection.
-		fallbackRet, err := catkv.LookupIDs(ctx, c.txn, c.tc.codec(), fallbackReqs)
+		fallbackRet, err := catkv.LookupIDs(ctx, c.txn, c.tc.Codec(), fallbackReqs)
 		if err != nil {
 			return nil, err
 		}

@@ -41,6 +41,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
+        "//pkg/sql/iefactory",
         "//pkg/sql/protoreflect",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/tree",

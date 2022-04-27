@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -301,9 +302,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		return nil
 	}
 
-	if err := tf.collectionFactory.Txn(
-		ctx, tf.ie, tf.db, initialTableDescsFn,
-	); err != nil {
+	if err := cftxn.CollectionFactoryTxn(ctx, tf.collectionFactory, tf.ie, tf.db, initialTableDescsFn); err != nil {
 		return err
 	}
 

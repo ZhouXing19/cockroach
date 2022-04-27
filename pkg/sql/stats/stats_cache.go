@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -545,7 +546,7 @@ func (sc *TableStatisticsCache) parseStats(
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			//
 			// TODO(ajwerner): We now do delete members from enum types. See #67050.
-			if err := sc.collectionFactory.Txn(ctx, sc.SQLExecutor, sc.ClientDB, func(
+			if err := cftxn.CollectionFactoryTxn(ctx, sc.collectionFactory, sc.SQLExecutor, sc.ClientDB, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 			) error {
 				resolver := descs.NewDistSQLTypeResolver(descriptors, txn)

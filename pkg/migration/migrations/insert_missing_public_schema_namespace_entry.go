@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -69,7 +70,7 @@ ORDER BY id ASC;
 		databaseIDs = append(databaseIDs, id)
 	}
 
-	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
+	return cftxn.CollectionFactoryTxn(ctx, d.CollectionFactory, d.InternalExecutor, d.DB, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		b := txn.NewBatch()

@@ -16,25 +16,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // MetadataUpdaterFactory used to construct a commenter.DescriptorMetadataUpdater, which
 // can be used to update comments on schema objects.
 type MetadataUpdaterFactory struct {
-	ieFactory         sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory         iefactory.SessionBoundInternalExecutorFactory
 	collectionFactory *descs.CollectionFactory
 	settings          *settings.Values
 }
 
 // NewMetadataUpdaterFactory creates a new comment updater factory.
 func NewMetadataUpdaterFactory(
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	ieFactory iefactory.SessionBoundInternalExecutorFactory,
 	collectionFactory *descs.CollectionFactory,
 	settings *settings.Values,
 ) scexec.DescriptorMetadataUpdaterFactory {

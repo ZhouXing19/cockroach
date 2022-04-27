@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -37,12 +37,12 @@ import (
 // index backfiller.
 type IndexBackfillerMergePlanner struct {
 	execCfg   *ExecutorConfig
-	ieFactory sqlutil.SessionBoundInternalExecutorFactory
+	ieFactory iefactory.SessionBoundInternalExecutorFactory
 }
 
 // NewIndexBackfillerMergePlanner creates a new IndexBackfillerMergePlanner.
 func NewIndexBackfillerMergePlanner(
-	execCfg *ExecutorConfig, ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+	execCfg *ExecutorConfig, ieFactory iefactory.SessionBoundInternalExecutorFactory,
 ) *IndexBackfillerMergePlanner {
 	return &IndexBackfillerMergePlanner{execCfg: execCfg, ieFactory: ieFactory}
 }

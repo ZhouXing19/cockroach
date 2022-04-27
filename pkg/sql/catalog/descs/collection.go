@@ -235,7 +235,7 @@ func (tc *Collection) WriteDescToBatch(
 	if err := tc.AddUncommittedDescriptor(desc); err != nil {
 		return err
 	}
-	descKey := catalogkeys.MakeDescMetadataKey(tc.codec(), desc.GetID())
+	descKey := catalogkeys.MakeDescMetadataKey(tc.Codec(), desc.GetID())
 	proto := desc.DescriptorProto()
 	if kvTrace {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
@@ -367,7 +367,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	}
 
 	log.Eventf(ctx, "fetching list of objects for %q", dbDesc.GetName())
-	prefix := catalogkeys.MakeObjectNameKey(tc.codec(), dbDesc.GetID(), schema.GetID(), "")
+	prefix := catalogkeys.MakeObjectNameKey(tc.Codec(), dbDesc.GetID(), schema.GetID(), "")
 	sr, err := txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0)
 	if err != nil {
 		return nil, nil, err
@@ -415,7 +415,9 @@ func (tc *Collection) RemoveSyntheticDescriptor(id descpb.ID) {
 	tc.synthetic.remove(id)
 }
 
-func (tc *Collection) codec() keys.SQLCodec {
+// Codec returns the methods for encoding SQL table keys bound to a given
+// tenant.
+func (tc *Collection) Codec() keys.SQLCodec {
 	return tc.kv.codec
 }
 
@@ -434,4 +436,22 @@ func (tc *Collection) AddDeletedDescriptor(id descpb.ID) {
 // should only be called in a multi-tenant environment.
 func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
+}
+
+// LookUpNameInKv is to look up a descriptor by name in a collection's descriptor
+// collections.
+func (tc *Collection) LookUpNameInKv(
+	ctx context.Context,
+	txn *kv.Txn,
+	maybeDB catalog.DatabaseDescriptor,
+	parentID descpb.ID,
+	parentSchemaID descpb.ID,
+	name string,
+) (id descpb.ID, err error) {
+	return tc.kv.lookupName(ctx, txn, maybeDB, parentID, parentSchemaID, name)
+}
+
+// GetDeletedDescs returns the deleted descriptor ids from the collection.
+func (tc *Collection) GetDeletedDescs() catalog.DescriptorIDSet {
+	return tc.deletedDescs
 }

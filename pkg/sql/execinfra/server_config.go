@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -146,7 +147,7 @@ type ServerConfig struct {
 	// SessionBoundInternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	SessionBoundInternalExecutorFactory iefactory.SessionBoundInternalExecutorFactory
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory

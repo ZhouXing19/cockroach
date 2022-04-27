@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -126,26 +127,21 @@ func GetUserSessionInitInfo(
 		}
 
 		// Find whether the user is an admin.
-		return execCfg.CollectionFactory.Txn(
-			ctx,
-			ie,
-			execCfg.DB,
-			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-				memberships, err := MemberOfWithAdminOption(
-					ctx,
-					execCfg,
-					ie,
-					descsCol,
-					txn,
-					username,
-				)
-				if err != nil {
-					return err
-				}
-				_, isSuperuser = memberships[security.AdminRoleName()]
-				return nil
-			},
-		)
+		return cftxn.CollectionFactoryTxn(ctx, execCfg.CollectionFactory, ie, execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+			memberships, err := MemberOfWithAdminOption(
+				ctx,
+				execCfg,
+				ie,
+				descsCol,
+				txn,
+				username,
+			)
+			if err != nil {
+				return err
+			}
+			_, isSuperuser = memberships[security.AdminRoleName()]
+			return nil
+		})
 	}); err != nil {
 		log.Warningf(ctx, "user membership lookup for %q failed: %v", username, err)
 		err = errors.Wrap(errors.Handled(err), "internal error while retrieving user account memberships")

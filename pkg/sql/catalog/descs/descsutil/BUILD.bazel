@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "descsutil",
+    srcs = ["descs_util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/descsutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/base",
+        "//pkg/kv",
+        "//pkg/spanconfig",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/hlc",
+        "//pkg/util/retry",
+    ],
+)

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -126,7 +127,7 @@ type Registry struct {
 	// field. Modifying the TableCollection is basically a per-query operation
 	// and should be a per-query setting. #34304 is the issue for creating/
 	// improving this API.
-	sessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+	sessionBoundInternalExecutorFactory iefactory.SessionBoundInternalExecutorFactory
 
 	// if non-empty, indicates path to file that prevents any job adoptions.
 	preventAdoptionFile string
@@ -230,7 +231,7 @@ func MakeRegistry(
 // executor. We expose this separately from the constructor to avoid a circular
 // dependency.
 func (r *Registry) SetSessionBoundInternalExecutorFactory(
-	factory sqlutil.SessionBoundInternalExecutorFactory,
+	factory iefactory.SessionBoundInternalExecutorFactory,
 ) {
 	r.sessionBoundInternalExecutorFactory = factory
 }

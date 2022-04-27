@@ -30,9 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/iefactory"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -181,7 +184,7 @@ func cleanupSessionTempObjects(
 	sessionID ClusterWideID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return cf.Txn(ctx, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	return cftxn.CollectionFactoryTxn(ctx, cf, ie, db, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 		// We are going to read all database descriptor IDs, then for each database
 		// we will drop all the objects under the temporary schema.
 		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
@@ -404,7 +407,7 @@ type TemporaryObjectCleaner struct {
 	settings                         *cluster.Settings
 	db                               *kv.DB
 	codec                            keys.SQLCodec
-	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory
+	makeSessionBoundInternalExecutor iefactory.SessionBoundInternalExecutorFactory
 	// statusServer gives access to the SQLStatus service.
 	statusServer           serverpb.SQLStatusServer
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc
@@ -433,7 +436,7 @@ func NewTemporaryObjectCleaner(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	registry *metric.Registry,
-	makeSessionBoundInternalExecutor sqlutil.SessionBoundInternalExecutorFactory,
+	makeSessionBoundInternalExecutor iefactory.SessionBoundInternalExecutorFactory,
 	statusServer serverpb.SQLStatusServer,
 	isMeta1LeaseholderFunc isMeta1LeaseholderFunc,
 	testingKnobs ExecutorTestingKnobs,
@@ -587,7 +590,7 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	}
 
 	// Clean up temporary data for inactive sessions.
-	ie := c.makeSessionBoundInternalExecutor(ctx, &sessiondata.SessionData{})
+	ie := c.makeSessionBoundInternalExecutor(ctx, &sessiondata.SessionData{}, &sqlextratxnstate.ExtraTxnState{Descs: descsCol})
 	for sessionID := range sessionIDs {
 		if _, ok := activeSessions[sessionID.Uint128]; !ok {
 			log.Eventf(ctx, "cleaning up temporary object for session %q", sessionID)

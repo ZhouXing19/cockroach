@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cftxn",
+    srcs = ["collection_factory_txn.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/kv",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/descs/descsutil",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/sqlutil",
+        "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

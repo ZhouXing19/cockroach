@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package descs
+package systabidresolver
 
 import (
 	"context"
@@ -17,23 +17,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
-// systemTableIDResolver is the implementation for catalog.SystemTableIDResolver.
-type systemTableIDResolver struct {
-	collectionFactory *CollectionFactory
+// SystemTableIDResolver is the implementation for catalog.SystemTableIDResolver.
+type SystemTableIDResolver struct {
+	collectionFactory *descs.CollectionFactory
 	ie                sqlutil.InternalExecutor
 	db                *kv.DB
 }
 
-var _ catalog.SystemTableIDResolver = (*systemTableIDResolver)(nil)
+var _ catalog.SystemTableIDResolver = (*SystemTableIDResolver)(nil)
 
 // MakeSystemTableIDResolver creates an object that implements catalog.SystemTableIDResolver.
 func MakeSystemTableIDResolver(
-	collectionFactory *CollectionFactory, ie sqlutil.InternalExecutor, db *kv.DB,
+	collectionFactory *descs.CollectionFactory, ie sqlutil.InternalExecutor, db *kv.DB,
 ) catalog.SystemTableIDResolver {
-	return &systemTableIDResolver{
+	return &SystemTableIDResolver{
 		collectionFactory: collectionFactory,
 		ie:                ie,
 		db:                db,
@@ -41,15 +43,15 @@ func MakeSystemTableIDResolver(
 }
 
 // LookupSystemTableID implements the catalog.SystemTableIDResolver method.
-func (r *systemTableIDResolver) LookupSystemTableID(
+func (r *SystemTableIDResolver) LookupSystemTableID(
 	ctx context.Context, tableName string,
 ) (descpb.ID, error) {
 
 	var id descpb.ID
-	if err := r.collectionFactory.Txn(ctx, r.ie, r.db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *Collection,
+	if err := cftxn.CollectionFactoryTxn(ctx, r.collectionFactory, r.ie, r.db, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		id, err = descriptors.kv.lookupName(
+		id, err = descriptors.LookUpNameInKv(
 			ctx, txn, nil /* maybeDatabase */, keys.SystemDatabaseID, keys.PublicSchemaID, tableName,
 		)
 		return err

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/migration"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -48,7 +49,7 @@ func seedSpanCountTableMigration(
 		return nil // only applicable for secondary tenants
 	}
 
-	return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+	return cftxn.CollectionFactoryTxn(ctx, d.CollectionFactory, d.InternalExecutor, d.DB, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
 		dbs, err := descriptors.GetAllDatabaseDescriptors(ctx, txn)
 		if err != nil {
 			return err

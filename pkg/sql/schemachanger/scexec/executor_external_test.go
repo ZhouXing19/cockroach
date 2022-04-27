@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -99,7 +101,7 @@ func (ti *testInfra) txn(
 	ctx context.Context,
 	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
-	return ti.cf.Txn(ctx, ti.ie, ti.db, f)
+	return cftxn.CollectionFactoryTxn(ctx, ti.cf, ti.ie, ti.db, f)
 }
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {
@@ -520,7 +522,10 @@ type noopMetadataUpdater struct {
 
 // NewMetadataUpdater implements scexec.DescriptorMetadataUpdaterFactory.
 func (noopMetadataUpdaterFactory) NewMetadataUpdater(
-	ctx context.Context, txn *kv.Txn, sessionData *sessiondata.SessionData,
+	ctx context.Context,
+	txn *kv.Txn,
+	sessionData *sessiondata.SessionData,
+	extraTxnState *sqlextratxnstate.ExtraTxnState,
 ) scexec.DescriptorMetadataUpdater {
 	return &noopMetadataUpdater{}
 }

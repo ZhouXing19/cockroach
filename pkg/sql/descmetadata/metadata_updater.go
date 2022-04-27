@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -132,26 +133,23 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
-	return mu.collectionFactory.Txn(ctx,
-		mu.ie,
-		mu.txn.DB(),
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-			desc, err := descriptors.GetMutableTableByID(
-				ctx,
-				txn,
-				keys.DatabaseRoleSettingsTableID,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:       true,
-						RequireMutable: true,
-					},
-				})
-			if err != nil {
-				return err
-			}
-			desc.MaybeIncrementVersion()
-			return descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, txn)
-		})
+	return cftxn.CollectionFactoryTxn(ctx, mu.collectionFactory, mu.ie, mu.txn.DB(), func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+		desc, err := descriptors.GetMutableTableByID(
+			ctx,
+			txn,
+			keys.DatabaseRoleSettingsTableID,
+			tree.ObjectLookupFlags{
+				CommonLookupFlags: tree.CommonLookupFlags{
+					Required:       true,
+					RequireMutable: true,
+				},
+			})
+		if err != nil {
+			return err
+		}
+		desc.MaybeIncrementVersion()
+		return descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, txn)
+	})
 }
 
 // SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.

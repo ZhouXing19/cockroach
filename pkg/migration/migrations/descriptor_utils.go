@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -75,7 +76,8 @@ func runPostDeserializationChangesOnAllDescriptors(
 	maybeUpgradeDescriptors := func(
 		ctx context.Context, d migration.TenantDeps, toUpgrade []descpb.ID,
 	) error {
-		return d.CollectionFactory.Txn(ctx, d.InternalExecutor, d.DB, func(
+
+		return cftxn.CollectionFactoryTxn(ctx, d.CollectionFactory, d.InternalExecutor, d.DB, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 		) error {
 			descs, err := descriptors.GetMutableDescriptorsByID(ctx, txn, toUpgrade...)

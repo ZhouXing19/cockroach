@@ -73,6 +73,7 @@ type InternalExecutor struct {
 	// Warning: Not safe for concurrent use from multiple goroutines.
 	syntheticDescriptors []catalog.Descriptor
 
+	// extraTxnState stores the information from the upstream(parent) transaction.
 	extraTxnState sqlextratxnstate.ExtraTxnState
 }
 
@@ -128,6 +129,8 @@ func (ie *InternalExecutor) SetSessionData(sessionData *sessiondata.SessionData)
 	ie.sessionDataStack = sessiondata.NewStack(sessionData)
 }
 
+// SetExtraTxnState is to store the information from the parent transactions
+// in an internal executor. Currently, it only passes the descriptor collection.
 func (ie *InternalExecutor) SetExtraTxnState(ts *sqlextratxnstate.ExtraTxnState) {
 	ie.extraTxnState.Descs = ts.Descs
 }

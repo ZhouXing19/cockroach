@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -97,7 +98,7 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 // WithTxnInJob implements the scrun.JobRunDependencies interface.
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
-	err := d.collectionFactory.Txn(ctx, d.internalExecutor, d.db, func(
+	err := cftxn.CollectionFactoryTxn(ctx, d.collectionFactory, d.internalExecutor, d.db, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		pl := d.job.Payload()

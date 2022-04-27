@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs/cftxn"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -124,23 +125,21 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			)
 		}
 		blocked := false
-		if err := p.ExecCfg().CollectionFactory.Txn(
-			ctx, p.ExecCfg().InternalExecutor, p.ExecCfg().DB,
-			func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-				if err := txn.SetFixedTimestamp(ctx, now); err != nil {
-					return err
-				}
-				desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
-					tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					})
-				if err != nil {
-					return err
-				}
-				blocked = desc.HasConcurrentSchemaChanges()
-				return nil
-			}); err != nil {
+		if err := cftxn.CollectionFactoryTxn(ctx, p.ExecCfg().CollectionFactory, p.ExecCfg().InternalExecutor, p.ExecCfg().DB, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+				return err
+			}
+			desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
+				tree.CommonLookupFlags{
+					Required:    true,
+					AvoidLeased: true,
+				})
+			if err != nil {
+				return err
+			}
+			blocked = desc.HasConcurrentSchemaChanges()
+			return nil
+		}); err != nil {
 			return err
 		}
 		if !blocked {
