@@ -730,7 +730,7 @@ func (sc *SchemaChanger) validateConstraints(
 				defer func() { collection.ReleaseAll(ctx) }()
 				if c.IsCheck() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: evalCtx.Descs}, desc, txn, c.Check().Expr,
 					); err != nil {
 						return err
 					}
@@ -739,12 +739,12 @@ func (sc *SchemaChanger) validateConstraints(
 						return err
 					}
 				} else if c.IsUniqueWithoutIndex() {
-					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{evalCtx.Descs}), desc, txn, c.GetName()); err != nil {
+					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, sc.ieFactory(ctx, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: evalCtx.Descs}), desc, txn, c.GetName()); err != nil {
 						return err
 					}
 				} else if c.IsNotNull() {
 					if err := validateCheckInTxn(
-						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{evalCtx.Descs}, desc, txn, c.Check().Expr,
+						ctx, &semaCtx, sc.ieFactory, evalCtx.SessionData(), &sqlextratxnstate.ExtraTxnState{Descs: evalCtx.Descs}, desc, txn, c.Check().Expr,
 					); err != nil {
 						// TODO (lucy): This should distinguish between constraint
 						// validation errors and other types of unexpected errors, and
@@ -2489,7 +2489,7 @@ func validateFkInTxn(
 			targetTable = syntheticTable
 		}
 	}
-	ie := ief(ctx, sd, &sqlextratxnstate.ExtraTxnState{descsCol})
+	ie := ief(ctx, sd, &sqlextratxnstate.ExtraTxnState{Descs: descsCol})
 	return ie.WithSyntheticDescriptors(syntheticDescs, func() error {
 		return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 	})

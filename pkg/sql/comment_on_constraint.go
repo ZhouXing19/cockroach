@@ -62,7 +62,7 @@ func (p *planner) CommentOnConstraint(
 			ctx,
 			p.txn,
 			p.SessionData(),
-			&sqlextratxnstate.ExtraTxnState{p.Descriptors()},
+			&sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()},
 		),
 	}, nil
 

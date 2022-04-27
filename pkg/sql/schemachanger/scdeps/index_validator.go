@@ -75,7 +75,7 @@ func (iv indexValidator) ValidateForwardIndexes(
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV), nil))
 	}
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
@@ -96,7 +96,7 @@ func (iv indexValidator) ValidateInvertedIndexes(
 		if err != nil {
 			return err
 		}
-		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV)))
+		return fn(ctx, validationTxn, iv.ieFactory(ctx, iv.newFakeSessionData(&iv.settings.SV), nil))
 	}
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false

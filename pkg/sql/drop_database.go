@@ -185,7 +185,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		p.txn,
 		p.SessionData(),
-		&sqlextratxnstate.ExtraTxnState{p.Descriptors()})
+		&sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()})
 	err := metadataUpdater.DeleteDescriptorComment(
 		int64(n.dbDesc.GetID()),
 		0,

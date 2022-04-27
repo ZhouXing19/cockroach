@@ -54,7 +54,7 @@ func (p *planner) CommentOnIndex(ctx context.Context, n *tree.CommentOnIndex) (p
 			ctx,
 			p.txn,
 			p.SessionData(),
-			&sqlextratxnstate.ExtraTxnState{p.Descriptors()},
+			&sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()},
 		)}, nil
 }
 

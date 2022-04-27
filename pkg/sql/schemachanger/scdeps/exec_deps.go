@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -413,7 +414,7 @@ func (d *execDeps) User() security.SQLUsername {
 
 // CommentUpdater implements the scexec.Dependencies interface.
 func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.DescriptorMetadataUpdater {
-	return d.commentUpdaterFactory.NewMetadataUpdater(ctx, d.txn, d.sessionData)
+	return d.commentUpdaterFactory.NewMetadataUpdater(ctx, d.txn, d.sessionData, &sqlextratxnstate.ExtraTxnState{Descs: d.descsCollection})
 }
 
 // EventLoggerFactory constructs a new event logger with a txn.

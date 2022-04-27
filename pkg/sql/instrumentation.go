@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
@@ -325,6 +326,7 @@ func (ih *instrumentationHelper) Finish(
 		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory(
 			p.EvalContext().Context,
 			p.SessionData(),
+			&sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()},
 		)
 		phaseTimes := statsCollector.PhaseTimes()
 		if ih.stmtDiagnosticsRecorder.IsExecLatencyConditionMet(

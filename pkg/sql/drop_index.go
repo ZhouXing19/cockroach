@@ -541,7 +541,7 @@ func (p *planner) dropIndexByName(
 		ctx,
 		p.txn,
 		p.SessionData(),
-		&sqlextratxnstate.ExtraTxnState{p.Descriptors()},
+		&sqlextratxnstate.ExtraTxnState{Descs: p.Descriptors()},
 	)
 	if err := commentUpdater.DeleteDescriptorComment(
 		int64(tableDesc.ID), int64(idxDesc.ID), keys.IndexCommentType); err != nil {

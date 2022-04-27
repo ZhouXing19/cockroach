@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlextratxnstate"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -94,7 +93,7 @@ func New(
 		settings:          cfg.Settings,
 		targets:           targets,
 		leaseMgr:          cfg.LeaseManager.(*lease.Manager),
-		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}, &sqlextratxnstate.ExtraTxnState{}),
+		ie:                cfg.SessionBoundInternalExecutorFactory(ctx, &sessiondata.SessionData{}, nil),
 		collectionFactory: cfg.CollectionFactory,
 		metrics:           metrics,
 		changefeedOpts:    changefeedOpts,

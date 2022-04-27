@@ -1719,7 +1719,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			ctx,
 			txn,
 			NewFakeSessionData(&sc.settings.SV),
-			&sqlextratxnstate.ExtraTxnState{descsCol})
+			&sqlextratxnstate.ExtraTxnState{Descs: descsCol})
 		for _, comment := range commentsToDelete {
 			err := metaDataUpdater.DeleteDescriptorComment(
 				comment.id,
