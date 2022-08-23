@@ -1576,7 +1576,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx, nil /* txn */); err != nil {
+		if err := r.cleanupTempSystemTables(ctx, nil /* txn */, r.execCfg.InternalExecutor); err != nil {
 			return err
 		}
 	} else if isSystemUserRestore(details) {
@@ -1585,7 +1585,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 		details = r.job.Details().(jobspb.RestoreDetails)
 
-		if err := r.cleanupTempSystemTables(ctx, nil /* txn */); err != nil {
+		if err := r.cleanupTempSystemTables(ctx, nil /* txn */, r.execCfg.InternalExecutor); err != nil {
 			return err
 		}
 	}
@@ -2071,8 +2071,8 @@ func (r *restoreResumer) OnFailOrCancel(
 	logJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	if err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := execCfg.CollectionFactory.TxnWithExecutor(ctx, execCfg.DB, nil, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		for _, tenant := range details.Tenants {
 			tenant.State = descpb.TenantInfo_DROP
@@ -2090,7 +2090,6 @@ func (r *restoreResumer) OnFailOrCancel(
 		if details.DescriptorCoverage == tree.AllDescriptors {
 			// We've dropped defaultdb and postgres in the planning phase, we must
 			// recreate them now if the full cluster restore failed.
-			ie := p.ExecCfg().InternalExecutor
 			_, err := ie.Exec(ctx, "recreate-defaultdb", txn, "CREATE DATABASE IF NOT EXISTS defaultdb")
 			if err != nil {
 				return err
@@ -2109,7 +2108,12 @@ func (r *restoreResumer) OnFailOrCancel(
 	if details.DescriptorCoverage == tree.AllDescriptors {
 		// The temporary system table descriptors should already have been dropped
 		// in `dropDescriptors` but we still need to drop the temporary system db.
-		if err := execCfg.DB.Txn(ctx, r.cleanupTempSystemTables); err != nil {
+		if err := r.execCfg.CollectionFactory.TxnWithExecutor(ctx, r.execCfg.DB, nil, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		) error {
+			return r.cleanupTempSystemTables(ctx, txn, ie)
+
+		}); err != nil {
 			return err
 		}
 	}
@@ -2630,8 +2634,9 @@ func (r *restoreResumer) restoreSystemTables(
 	return nil
 }
 
-func (r *restoreResumer) cleanupTempSystemTables(ctx context.Context, txn *kv.Txn) error {
-	executor := r.execCfg.InternalExecutor
+func (r *restoreResumer) cleanupTempSystemTables(
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
+) error {
 	// Check if the temp system database has already been dropped. This can happen
 	// if the restore job fails after the system database has cleaned up.
 	checkIfDatabaseExists := "SELECT database_name FROM [SHOW DATABASES] WHERE database_name=$1"
