@@ -72,3 +72,17 @@ ReadyForQuery
 ----
 {"Type":"ErrorResponse","Code":"08P01"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Parse {"Name": "s", "Query": "select 3"}
+Bind {"DestinationPortal": "p", "PreparedStatement": "s", "ParameterFormatCodes": [0], "Parameters": [{"text":"foo"}]}
+Describe {"ObjectType": "P", "Name": "p"}
+Execute {"Portal": "p"}
+Sync
+----
+
+
+until
+ReadyForQuery
+----
