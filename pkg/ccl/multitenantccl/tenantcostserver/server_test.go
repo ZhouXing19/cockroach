@@ -244,7 +244,7 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 		d.Fatalf(t, "failed to parse request yaml: %v", err)
 	}
 	ief := ts.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
-	if err := ief.TxnWithExecutor(context.Background(), ts.kvDB, nil /* sessionData */, func(
+	if err := ief.TxnWithExecutor(context.Background(), ts.kvDB, nil /* sessionData */, nil /* postCommitFn */, func(
 		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 	) error {
 		return ts.tenantUsage.ReconfigureTokenBucket(

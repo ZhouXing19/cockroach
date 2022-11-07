@@ -70,7 +70,7 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 			}
 			sd.SearchPath = &searchPath
 			ief := s.InternalExecutorFactory().(descs.TxnManager)
-			err = ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
+			err = ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, nil /* postCommitFn */, func(
 				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 			) error {
 				for _, stmt := range stmts {

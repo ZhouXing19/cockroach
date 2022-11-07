@@ -2222,7 +2222,7 @@ func (r *restoreResumer) OnFailOrCancel(
 	logJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr)
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
-	if err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, p.SessionData(), func(
+	if err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, p.SessionData(), nil /* postCommitFn */, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		for _, tenant := range details.Tenants {

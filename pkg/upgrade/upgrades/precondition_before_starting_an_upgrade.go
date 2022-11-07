@@ -49,36 +49,35 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	var errMsg strings.Builder
-	err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
-			query := `SELECT * FROM crdb_internal.invalid_objects`
-			rows, err := ie.QueryIterator(
-				ctx, "check-if-there-are-any-invalid-descriptors", txn /* txn */, query)
-			if err != nil {
-				return err
-			}
-			var hasNext bool
-			for hasNext, err = rows.Next(ctx); hasNext && err == nil; hasNext, err = rows.Next(ctx) {
-				// There exists invalid objects; Accumulate their information into `errMsg`.
-				// `crdb_internal.invalid_objects` has five columns: id, database name, schema name, table name, error.
-				row := rows.Cur()
-				descName := tree.MakeTableNameWithSchema(
-					tree.Name(tree.MustBeDString(row[1])),
-					tree.Name(tree.MustBeDString(row[2])),
-					tree.Name(tree.MustBeDString(row[3])),
-				)
-				tableID := descpb.ID(tree.MustBeDInt(row[0]))
-				errString := string(tree.MustBeDString(row[4]))
-				// TODO(ssd): Remove in 23.1 once we are sure that the migration which fixes this corruption has run.
-				if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString) {
-					log.Infof(ctx, "ignoring invalid descriptor %v (%v) with error %q because it looks like known userfile-related corruption",
-						descName.String(), tableID, errString)
-				} else {
-					errMsg.WriteString(fmt.Sprintf("invalid descriptor: %v (%v) because %v\n", descName.String(), row[0], row[4]))
-				}
-			}
+	err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, nil /* postCommitFunc */, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
+		query := `SELECT * FROM crdb_internal.invalid_objects`
+		rows, err := ie.QueryIterator(
+			ctx, "check-if-there-are-any-invalid-descriptors", txn /* txn */, query)
+		if err != nil {
 			return err
-		})
+		}
+		var hasNext bool
+		for hasNext, err = rows.Next(ctx); hasNext && err == nil; hasNext, err = rows.Next(ctx) {
+			// There exists invalid objects; Accumulate their information into `errMsg`.
+			// `crdb_internal.invalid_objects` has five columns: id, database name, schema name, table name, error.
+			row := rows.Cur()
+			descName := tree.MakeTableNameWithSchema(
+				tree.Name(tree.MustBeDString(row[1])),
+				tree.Name(tree.MustBeDString(row[2])),
+				tree.Name(tree.MustBeDString(row[3])),
+			)
+			tableID := descpb.ID(tree.MustBeDInt(row[0]))
+			errString := string(tree.MustBeDString(row[4]))
+			// TODO(ssd): Remove in 23.1 once we are sure that the migration which fixes this corruption has run.
+			if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString) {
+				log.Infof(ctx, "ignoring invalid descriptor %v (%v) with error %q because it looks like known userfile-related corruption",
+					descName.String(), tableID, errString)
+			} else {
+				errMsg.WriteString(fmt.Sprintf("invalid descriptor: %v (%v) because %v\n", descName.String(), row[0], row[4]))
+			}
+		}
+		return err
+	})
 	if err != nil {
 		return err
 	}

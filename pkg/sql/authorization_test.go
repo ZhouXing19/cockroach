@@ -42,7 +42,7 @@ func TestCheckAnyPrivilegeForNodeUser(t *testing.T) {
 
 	ief := ts.InternalExecutorFactory().(descs.TxnManager)
 
-	if err := ief.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
+	if err := ief.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, nil /* postCommitFunc */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		row, err := ie.QueryRowEx(

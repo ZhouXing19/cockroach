@@ -48,7 +48,7 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 	ief := s0.InternalExecutorFactory().(descs.TxnManager)
 	require.NoError(
 		t,
-		ief.DescsTxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(
+		ief.DescsTxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, nil /* postCommitFn */, func(
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
 			tn := tree.MakeTableNameWithSchema("db", "schema", "table")

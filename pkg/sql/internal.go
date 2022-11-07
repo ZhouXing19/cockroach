@@ -1369,6 +1369,7 @@ func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
 	ctx context.Context,
 	db *kv.DB,
 	sd *sessiondata.SessionData,
+	postCommitFunc func(txn *kv.Txn) error,
 	f descs.TxnWithExecutorFunc,
 	opts ...sqlutil.TxnOption,
 ) error {
@@ -1424,7 +1425,13 @@ func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
 			if err != nil {
 				return err
 			}
-			return commitTxnFn(ctx)
+			if err := commitTxnFn(ctx); err != nil {
+				return err
+			}
+			if postCommitFunc != nil {
+				return postCommitFunc(txn)
+			}
+			return nil
 		}); descs.IsTwoVersionInvariantViolationError(err) {
 			continue
 		} else {
@@ -1444,15 +1451,9 @@ func (ief *InternalExecutorFactory) DescsTxn(
 	f func(context.Context, *kv.Txn, *descs.Collection) error,
 	opts ...sqlutil.TxnOption,
 ) error {
-	return ief.DescsTxnWithExecutor(
-		ctx,
-		db,
-		nil, /* sessionData */
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, _ sqlutil.InternalExecutor) error {
-			return f(ctx, txn, descriptors)
-		},
-		opts...,
-	)
+	return ief.DescsTxnWithExecutor(ctx, db, nil /* sessionData */, nil /* postCommitFunc */, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, _ sqlutil.InternalExecutor) error {
+		return f(ctx, txn, descriptors)
+	}, opts...)
 }
 
 // TxnWithExecutor is to run queries with internal executor in a transactional
@@ -1461,16 +1462,11 @@ func (ief *InternalExecutorFactory) TxnWithExecutor(
 	ctx context.Context,
 	db *kv.DB,
 	sd *sessiondata.SessionData,
-	f func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	postCommitFunc func(*kv.Txn) error,
+	f func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error,
 	opts ...sqlutil.TxnOption,
 ) error {
-	return ief.DescsTxnWithExecutor(
-		ctx,
-		db,
-		sd,
-		func(ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor) error {
-			return f(ctx, txn, ie)
-		},
-		opts...,
-	)
+	return ief.DescsTxnWithExecutor(ctx, db, sd, postCommitFunc, func(ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor) error {
+		return f(ctx, txn, ie)
+	}, opts...)
 }

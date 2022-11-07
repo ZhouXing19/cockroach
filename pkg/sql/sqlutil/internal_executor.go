@@ -226,7 +226,7 @@ type InternalExecutorFactory interface {
 	//
 	// The passed transaction is pre-emptively anchored to the system config key on
 	// the system tenant.
-	TxnWithExecutor(context.Context, *kv.DB, *sessiondata.SessionData, func(context.Context, *kv.Txn, InternalExecutor) error, ...TxnOption) error
+	TxnWithExecutor(ctx context.Context, db *kv.DB, sd *sessiondata.SessionData, postCommitFn func(*kv.Txn) error, f func(context.Context, *kv.Txn, InternalExecutor) error, opts ...TxnOption) error
 
 	// MakeInternalExecutorWithoutTxn returns an internal executor not bound with any
 	// txn.

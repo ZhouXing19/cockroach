@@ -840,7 +840,7 @@ func TestGetAllDescriptorsInDatabase(t *testing.T) {
 
 	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV)
 	sd.Database = "db"
-	require.NoError(t, tm.DescsTxnWithExecutor(ctx, s0.DB(), sd, func(
+	require.NoError(t, tm.DescsTxnWithExecutor(ctx, s0.DB(), sd, nil /* postCommitFunc */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		dbDesc, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", tree.DatabaseLookupFlags{AvoidLeased: true})
@@ -1124,7 +1124,7 @@ SELECT id
 	ec := s.ExecutorConfig().(sql.ExecutorConfig)
 	codec := ec.Codec
 	descIDGen := ec.DescIDGenerator
-	require.NoError(t, ec.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
+	require.NoError(t, ec.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, nil /* postCommitFunc */, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {

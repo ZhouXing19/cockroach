@@ -374,7 +374,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		// use stepping below, because that buys us admission control.
 		ief := a.admin.server.sqlServer.execCfg.InternalExecutorFactory
 		runner = func(ctx context.Context, fn txnFunc) error {
-			return ief.TxnWithExecutor(ctx, a.admin.server.db, nil /* sessionData */, func(
+			return ief.TxnWithExecutor(ctx, a.admin.server.db, nil /* sessionData */, nil /* postCommitFn */, func(
 				ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 			) error {
 				return fn(ctx, txn, ie)

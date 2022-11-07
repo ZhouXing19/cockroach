@@ -2476,7 +2476,7 @@ func (sc *SchemaChanger) txnWithExecutor(
 		}
 	}
 	return sc.execCfg.InternalExecutorFactory.
-		DescsTxnWithExecutor(ctx, sc.db, sd, f)
+		DescsTxnWithExecutor(ctx, sc.db, sd, nil /* postCommitFn */, f)
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.

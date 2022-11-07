@@ -245,33 +245,32 @@ func NewFileToTableSystem(
 	if err != nil {
 		return nil, err
 	}
-	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
-		ctx, e.db, nil /* SessionData */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
-		) error {
-			// TODO(adityamaru): Handle scenario where the user has already created
-			// tables with the same names not via the FileToTableSystem
-			// object. Not sure if we want to error out or work around it.
-			tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, ie)
-			if err != nil {
+	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(ctx, e.db, nil /* sessionData */, nil /* postCommitFunc */, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
+		// TODO(adityamaru): Handle scenario where the user has already created
+		// tables with the same names not via the FileToTableSystem
+		// object. Not sure if we want to error out or work around it.
+		tablesExist, err := f.checkIfFileAndPayloadTableExist(ctx, txn, ie)
+		if err != nil {
+			return err
+		}
+
+		if !tablesExist {
+			if err := f.createFileAndPayloadTables(ctx, txn, ie); err != nil {
 				return err
 			}
 
-			if !tablesExist {
-				if err := f.createFileAndPayloadTables(ctx, txn, ie); err != nil {
-					return err
-				}
-
-				if err := f.grantCurrentUserTablePrivileges(ctx, txn, ie); err != nil {
-					return err
-				}
-
-				if err := f.revokeOtherUserTablePrivileges(ctx, txn, ie); err != nil {
-					return err
-				}
+			if err := f.grantCurrentUserTablePrivileges(ctx, txn, ie); err != nil {
+				return err
 			}
-			return nil
-		}); err != nil {
+
+			if err := f.revokeOtherUserTablePrivileges(ctx, txn, ie); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
 
@@ -367,28 +366,27 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 		return err
 	}
 
-	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
-		ctx, e.db, nil /* sd */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
-		) error {
-			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := ie.ExecEx(ctx, "drop-payload-table", txn,
-				sessiondata.InternalExecutorOverride{User: f.username},
-				dropPayloadTableQuery)
-			if err != nil {
-				return errors.Wrap(err, "failed to drop payload table")
-			}
+	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(ctx, e.db, nil /* sessionData */, nil /* postCommitFunc */, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
+		dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
+		_, err := ie.ExecEx(ctx, "drop-payload-table", txn,
+			sessiondata.InternalExecutorOverride{User: f.username},
+			dropPayloadTableQuery)
+		if err != nil {
+			return errors.Wrap(err, "failed to drop payload table")
+		}
 
-			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = ie.ExecEx(ctx, "drop-file-table", txn,
-				sessiondata.InternalExecutorOverride{User: f.username},
-				dropFileTableQuery)
-			if err != nil {
-				return errors.Wrap(err, "failed to drop file table")
-			}
+		dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
+		_, err = ie.ExecEx(ctx, "drop-file-table", txn,
+			sessiondata.InternalExecutorOverride{User: f.username},
+			dropFileTableQuery)
+		if err != nil {
+			return errors.Wrap(err, "failed to drop file table")
+		}
 
-			return nil
-		}); err != nil {
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -582,7 +580,7 @@ func (w *chunkWriter) Write(buf []byte) (int, error) {
 		// retry loop.
 		if w.buf.Len() == w.buf.Cap() {
 			// TODO(janexing): Is it necessary to run the following within a txn?
-			if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, func(
+			if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, nil /* postCommitFn */, func(
 				ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 			) error {
 				if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn, ie); err != nil {
@@ -614,7 +612,7 @@ func (w *chunkWriter) Close() error {
 	// propagated here.
 	if w.buf.Len() > 0 {
 		// TODO(janexing): Is it necessary to run the following within a txn?
-		if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, func(
+		if err := w.pw.ief.TxnWithExecutor(w.pw.ctx, w.pw.db, nil /* sessionData */, nil /* postCommitFn */, func(
 			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 		) error {
 			if n, err := w.pw.WriteChunk(w.buf.Bytes(), txn, ie); err != nil {

@@ -2416,45 +2416,44 @@ func (s *statusServer) HotRangesV2(
 						schemaName = meta.(tableMeta).schemaName
 						indexName = meta.(tableMeta).indexName
 					} else {
-						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
-							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
-								commonLookupFlags := tree.CommonLookupFlags{
-									Required:    false,
-									AvoidLeased: true,
-								}
-								desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
-									CommonLookupFlags: commonLookupFlags,
-								})
-								if err != nil {
-									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
-								}
-								tableName = desc.GetName()
+						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.db, nil /* sessionData */, nil /* postCommitFn */, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
+							commonLookupFlags := tree.CommonLookupFlags{
+								Required:    false,
+								AvoidLeased: true,
+							}
+							desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
+								CommonLookupFlags: commonLookupFlags,
+							})
+							if err != nil {
+								return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
+							}
+							tableName = desc.GetName()
 
-								if !maybeIndexPrefix.Equal(roachpb.KeyMin) {
-									if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
-										log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s: %v", r.Desc, err)
+							if !maybeIndexPrefix.Equal(roachpb.KeyMin) {
+								if _, _, idxID, err := s.sqlServer.execCfg.Codec.DecodeIndexPrefix(r.Desc.StartKey.AsRawKey()); err != nil {
+									log.Warningf(ctx, "cannot decode index prefix for range descriptor: %s: %v", r.Desc, err)
+								} else {
+									if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
+										log.Warningf(ctx, "cannot get index name for range descriptor: %s: %v", r.Desc, err)
 									} else {
-										if index, err := desc.FindIndexWithID(descpb.IndexID(idxID)); err != nil {
-											log.Warningf(ctx, "cannot get index name for range descriptor: %s: %v", r.Desc, err)
-										} else {
-											indexName = index.GetName()
-										}
+										indexName = index.GetName()
 									}
 								}
+							}
 
-								if ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags); err != nil {
-									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
-								} else if ok {
-									dbName = dbDesc.GetName()
-								}
+							if ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags); err != nil {
+								log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
+							} else if ok {
+								dbName = dbDesc.GetName()
+							}
 
-								if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err != nil {
-									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
-								} else {
-									schemaName = schemaDesc.GetName()
-								}
-								return nil
-							}); err != nil {
+							if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err != nil {
+								log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
+							} else {
+								schemaName = schemaDesc.GetName()
+							}
+							return nil
+						}); err != nil {
 							log.Warningf(ctx, "failed to get table info for %s: %v", r.Desc, err)
 							continue
 						}

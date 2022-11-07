@@ -707,7 +707,7 @@ func getDatabaseIDAndDesc(
 // as regular databases, we drop them before restoring them again in the
 // restore.
 func dropDefaultUserDBs(ctx context.Context, execCfg *sql.ExecutorConfig) error {
-	return execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
+	return execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, nil /* postCommitFn */, func(
 		ctx context.Context, txn *kv.Txn, _ *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		_, err := ie.Exec(ctx, "drop-defaultdb", txn, "DROP DATABASE IF EXISTS defaultdb")

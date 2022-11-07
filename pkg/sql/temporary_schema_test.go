@@ -97,7 +97,7 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	}
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	ief := execCfg.InternalExecutorFactory
-	require.NoError(t, ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
+	require.NoError(t, ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, nil /* postCommitFn */, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		ie sqlutil.InternalExecutor,
 	) error {

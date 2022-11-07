@@ -56,13 +56,7 @@ type TxnManager interface {
 	// also ensures that the internal executor also share the same descriptor
 	// collection. Please use this interface if you want to run multiple sql
 	// statement with an internal executor in a txn.
-	DescsTxnWithExecutor(
-		ctx context.Context,
-		db *kv.DB,
-		sd *sessiondata.SessionData,
-		f TxnWithExecutorFunc,
-		opts ...sqlutil.TxnOption,
-	) error
+	DescsTxnWithExecutor(ctx context.Context, db *kv.DB, sd *sessiondata.SessionData, postCommitFunc func(txn *kv.Txn) error, f TxnWithExecutorFunc, opts ...sqlutil.TxnOption) error
 
 	// DescsTxn is similar to DescsTxnWithExecutor but without an internal executor.
 	// It creates a descriptor collection that lives within the scope of the given

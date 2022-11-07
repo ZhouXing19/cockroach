@@ -175,40 +175,39 @@ func cleanupSessionTempObjects(
 	sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return ief.(descs.TxnManager).DescsTxnWithExecutor(
-		ctx, db, nil /* sessionData */, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-			ie sqlutil.InternalExecutor,
-		) error {
-			// We are going to read all database descriptor IDs, then for each database
-			// we will drop all the objects under the temporary schema.
-			allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
-			if err != nil {
+	return ief.(descs.TxnManager).DescsTxnWithExecutor(ctx, db, nil /* sessionData */, nil /* postCommitFn */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		ie sqlutil.InternalExecutor,
+	) error {
+		// We are going to read all database descriptor IDs, then for each database
+		// we will drop all the objects under the temporary schema.
+		allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
+		if err != nil {
+			return err
+		}
+		for _, dbDesc := range allDbDescs {
+			if err := cleanupSchemaObjects(
+				ctx,
+				txn,
+				descsCol,
+				codec,
+				ie,
+				dbDesc,
+				tempSchemaName,
+			); err != nil {
 				return err
 			}
-			for _, dbDesc := range allDbDescs {
-				if err := cleanupSchemaObjects(
-					ctx,
-					txn,
-					descsCol,
-					codec,
-					ie,
-					dbDesc,
-					tempSchemaName,
-				); err != nil {
-					return err
-				}
-				// Even if no objects were found under the temporary schema, the schema
-				// itself may still exist (eg. a temporary table was created and then
-				// dropped). So we remove the namespace table entry of the temporary
-				// schema.
-				key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
-				if _, err := txn.Del(ctx, key); err != nil {
-					return err
-				}
+			// Even if no objects were found under the temporary schema, the schema
+			// itself may still exist (eg. a temporary table was created and then
+			// dropped). So we remove the namespace table entry of the temporary
+			// schema.
+			key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
+			if _, err := txn.Del(ctx, key); err != nil {
+				return err
 			}
-			return nil
-		})
+		}
+		return nil
+	})
 }
 
 // cleanupSchemaObjects removes all objects that is located within a dbID and schema.

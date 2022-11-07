@@ -53,7 +53,7 @@ func (s *instance) TokenBucketRequest(
 
 	result := &roachpb.TokenBucketResponse{}
 	var consumption roachpb.TenantConsumption
-	if err := s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	if err := s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, nil /* postCommitFn */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		*result = roachpb.TokenBucketResponse{}
 
 		h := makeSysTableHelper(ctx, tenantID)
