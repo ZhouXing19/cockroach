@@ -42,7 +42,8 @@ func fixInvalidObjectsThatLookLikeBadUserfileConstraint(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, nil,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
+		func(ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor) error {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			query := `SELECT * FROM crdb_internal.invalid_objects`
 			rows, err := ie.QueryIterator(ctx, "find-invalid-descriptors", txn, query)
 			if err != nil {

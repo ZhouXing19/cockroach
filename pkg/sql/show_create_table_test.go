@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,8 +48,9 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 	require.NoError(
 		t,
 		ief.DescsTxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+			ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 		) error {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
 			flags := tree.ObjectLookupFlagsWithRequired()
 

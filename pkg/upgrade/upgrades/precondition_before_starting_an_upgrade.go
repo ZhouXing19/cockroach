@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -50,7 +49,8 @@ func preconditionNoInvalidDescriptorsBeforeUpgrading(
 ) error {
 	var errMsg strings.Builder
 	err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData,
-		func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error {
+		func(ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor) error {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			query := `SELECT * FROM crdb_internal.invalid_objects`
 			rows, err := ie.QueryIterator(
 				ctx, "check-if-there-are-any-invalid-descriptors", txn /* txn */, query)

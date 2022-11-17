@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -98,9 +97,9 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	ief := execCfg.InternalExecutorFactory
 	require.NoError(t, ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-		ie sqlutil.InternalExecutor,
+		ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
+		txn, ie := txnEx.Txn, txnEx.InternalExecutor
 		// Add a hack to not wait for one version on the descriptors.
 		defer descsCol.ReleaseAll(ctx)
 		defaultDB, err := descsCol.Direct().MustGetDatabaseDescByID(

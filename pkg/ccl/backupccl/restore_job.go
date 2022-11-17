@@ -1512,8 +1512,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// public.
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
-		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
-			return r.publishDescriptors(ctx, txn, ie, p.ExecCfg(), p.User(), descsCol, details, nil)
+		publishDescriptors := func(ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor) (err error) {
+			return r.publishDescriptors(ctx, txnEx.Txn, txnEx.InternalExecutor, p.ExecCfg(), p.User(), descsCol, details, nil)
 		}
 		if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* sd */, publishDescriptors); err != nil {
 			return err
@@ -1644,8 +1644,8 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		devalidateIndexes = bad
 	}
 
-	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
-		return r.publishDescriptors(ctx, txn, ie, p.ExecCfg(), p.User(), descsCol, details, devalidateIndexes)
+	publishDescriptors := func(ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor) (err error) {
+		return r.publishDescriptors(ctx, txnEx.Txn, txnEx.InternalExecutor, p.ExecCfg(), p.User(), descsCol, details, devalidateIndexes)
 	}
 	if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* sd */, publishDescriptors); err != nil {
 		return err
@@ -2217,7 +2217,7 @@ func (r *restoreResumer) OnFailOrCancel(
 
 	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
 	if err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, p.SessionData(), func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
 		for _, tenant := range details.Tenants {
 			tenant.State = descpb.TenantInfo_DROP
@@ -2228,7 +2228,7 @@ func (r *restoreResumer) OnFailOrCancel(
 			}
 		}
 
-		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol, ie); err != nil {
+		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txnEx.Txn, descsCol, txnEx.InternalExecutor); err != nil {
 			return err
 		}
 

@@ -128,8 +128,9 @@ func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalIntern
 	now := vd.db.Clock().Now()
 	return descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
 		return vd.ieFactory.(descs.TxnManager).DescsTxnWithExecutor(ctx, vd.db, vd.newFakeSessionData(&vd.settings.SV), func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+			ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 		) error {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}

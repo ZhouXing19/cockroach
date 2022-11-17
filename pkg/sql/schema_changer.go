@@ -2483,9 +2483,9 @@ func (sc *SchemaChanger) txnWithExecutor(
 	}
 	sd := NewFakeSessionData(sc.execCfg.SV())
 	return sc.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, sc.db, sd, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
-		ie sqlutil.InternalExecutor,
+		ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
+		txn, ie := txnEx.Txn, txnEx.InternalExecutor
 		return f(ctx, txn, sd, descriptors, ie)
 	})
 }

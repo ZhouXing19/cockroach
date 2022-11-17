@@ -20,7 +20,6 @@ import (
 	"text/tabwriter"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -71,8 +70,9 @@ func TestTxnWithExecutorDataDriven(t *testing.T) {
 			sd.SearchPath = &searchPath
 			ief := s.InternalExecutorFactory().(descs.TxnManager)
 			err = ief.DescsTxnWithExecutor(ctx, kvDB, nil /* sessionData */, func(
-				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+				ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 			) error {
+				txn, ie := txnEx.Txn, txnEx.InternalExecutor
 				for _, stmt := range stmts {
 					switch d.Cmd {
 					case "exec":

@@ -232,8 +232,9 @@ func (f *fullReconciler) reconcile(
 	var records []spanconfig.Record
 
 	if err := f.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, f.execCfg.DB, nil /* session data */, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
+		txn, ie := txnEx.Txn, txnEx.InternalExecutor
 		translator := f.sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
 		records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, translator)
 		return err
@@ -477,8 +478,9 @@ func (r *incrementalReconciler) reconcile(
 			var records []spanconfig.Record
 
 			if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* session data */, func(
-				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+				ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 			) error {
+				txn, ie := txnEx.Txn, txnEx.InternalExecutor
 				var err error
 
 				// TODO(irfansharif): Instead of these filter methods for missing

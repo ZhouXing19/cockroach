@@ -226,7 +226,7 @@ type InternalExecutorFactory interface {
 	//
 	// The passed transaction is pre-emptively anchored to the system config key on
 	// the system tenant.
-	TxnWithExecutor(context.Context, *kv.DB, *sessiondata.SessionData, func(context.Context, *kv.Txn, InternalExecutor) error, ...TxnOption) error
+	TxnWithExecutor(context.Context, *kv.DB, *sessiondata.SessionData, func(context.Context, *TxnExecutor) error, ...TxnOption) error
 
 	// MakeInternalExecutorWithoutTxn returns an internal executor not bound with any
 	// txn.
@@ -265,4 +265,9 @@ var steppingEnabled = txnOptionFn(func(o *TxnConfig) {
 // transaction when executing each statement.
 func SteppingEnabled() TxnOption {
 	return steppingEnabled
+}
+
+type TxnExecutor struct {
+	Txn              *kv.Txn
+	InternalExecutor InternalExecutor
 }

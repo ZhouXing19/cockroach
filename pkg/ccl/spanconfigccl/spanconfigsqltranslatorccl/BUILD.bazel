@@ -16,7 +16,6 @@ go_test(
         "//pkg/ccl/utilccl",
         "//pkg/config/zonepb",
         "//pkg/jobs/jobspb",
-        "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

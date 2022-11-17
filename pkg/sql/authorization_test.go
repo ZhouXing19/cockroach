@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -43,8 +42,9 @@ func TestCheckAnyPrivilegeForNodeUser(t *testing.T) {
 	ief := ts.InternalExecutorFactory().(descs.TxnManager)
 
 	if err := ief.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
+		txn, ie := txnEx.Txn, txnEx.InternalExecutor
 		row, err := ie.QueryRowEx(
 			ctx, "get-all-databases", txn, sessiondata.NodeUserSessionDataOverride,
 			"SELECT count(1) FROM crdb_internal.databases",

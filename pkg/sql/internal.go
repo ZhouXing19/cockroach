@@ -1464,7 +1464,7 @@ func (ief *InternalExecutorFactory) TxnWithExecutor(
 	ctx context.Context,
 	db *kv.DB,
 	sd *sessiondata.SessionData,
-	f func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	f func(context.Context, *sqlutil.TxnExecutor) error,
 	opts ...sqlutil.TxnOption,
 ) error {
 	return ief.DescsTxnWithExecutor(

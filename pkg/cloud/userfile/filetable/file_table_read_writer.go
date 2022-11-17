@@ -247,8 +247,9 @@ func NewFileToTableSystem(
 	}
 	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
 		ctx, e.db, nil /* SessionData */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+			ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 		) error {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			// TODO(adityamaru): Handle scenario where the user has already created
 			// tables with the same names not via the FileToTableSystem
 			// object. Not sure if we want to error out or work around it.
@@ -369,10 +370,10 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 
 	if err := e.ief.(descs.TxnManager).DescsTxnWithExecutor(
 		ctx, e.db, nil /* sd */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+			ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 		) error {
 			dropPayloadTableQuery := fmt.Sprintf(`DROP TABLE %s`, f.GetFQPayloadTableName())
-			_, err := ie.ExecEx(ctx, "drop-payload-table", txn,
+			_, err := txnEx.InternalExecutor.ExecEx(ctx, "drop-payload-table", txnEx.Txn,
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropPayloadTableQuery)
 			if err != nil {
@@ -380,7 +381,7 @@ func DestroyUserFileSystem(ctx context.Context, f *FileToTableSystem) error {
 			}
 
 			dropFileTableQuery := fmt.Sprintf(`DROP TABLE %s CASCADE`, f.GetFQFileTableName())
-			_, err = ie.ExecEx(ctx, "drop-file-table", txn,
+			_, err = txnEx.InternalExecutor.ExecEx(ctx, "drop-file-table", txnEx.Txn,
 				sessiondata.InternalExecutorOverride{User: f.username},
 				dropFileTableQuery)
 			if err != nil {

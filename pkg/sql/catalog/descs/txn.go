@@ -29,9 +29,8 @@ import (
 // Collection and an InternalExecutor.
 type TxnWithExecutorFunc = func(
 	ctx context.Context,
-	txn *kv.Txn,
 	descriptors *Collection,
-	ie sqlutil.InternalExecutor,
+	txnEx *sqlutil.TxnExecutor,
 ) error
 
 // CheckTwoVersionInvariant checks whether any new schema being modified written

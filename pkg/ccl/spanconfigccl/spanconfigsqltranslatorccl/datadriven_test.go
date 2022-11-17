@@ -21,7 +21,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqltranslator"
@@ -182,9 +181,9 @@ func TestDataDriven(t *testing.T) {
 				var records []spanconfig.Record
 				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
 				err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+					ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txnEx.Txn, txnEx.InternalExecutor, descsCol)
 					var err error
 					records, _, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
 					require.NoError(t, err)
@@ -214,9 +213,9 @@ func TestDataDriven(t *testing.T) {
 				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
 				var records []spanconfig.Record
 				err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+					ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txnEx.Txn, txnEx.InternalExecutor, descsCol)
 					var err error
 					records, _, err = spanconfig.FullTranslate(ctx, sqlTranslator)
 					require.NoError(t, err)

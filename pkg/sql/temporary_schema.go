@@ -177,9 +177,9 @@ func cleanupSessionTempObjects(
 	tempSchemaName := temporarySchemaName(sessionID)
 	return ief.(descs.TxnManager).DescsTxnWithExecutor(
 		ctx, db, nil /* sessionData */, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-			ie sqlutil.InternalExecutor,
+			ctx context.Context, descsCol *descs.Collection, txnEx *sqlutil.TxnExecutor,
 		) error {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			// We are going to read all database descriptor IDs, then for each database
 			// we will drop all the objects under the temporary schema.
 			allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)

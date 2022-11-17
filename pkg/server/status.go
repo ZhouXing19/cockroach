@@ -2417,7 +2417,9 @@ func (s *statusServer) HotRangesV2(
 						indexName = meta.(tableMeta).indexName
 					} else {
 						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
-							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
+							ctx, s.db, nil, func(ctx context.Context, col *descs.Collection, txnEx *sqlutil.TxnExecutor,
+							) error {
+								txn := txnEx.Txn
 								commonLookupFlags := tree.CommonLookupFlags{
 									Required:    false,
 									AvoidLeased: true,

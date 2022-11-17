@@ -35,12 +35,13 @@ func upgradeSequenceToBeReferencedByID(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) (err error) {
+		txn, ie := txnEx.Txn, txnEx.InternalExecutor
 		var lastUpgradedID descpb.ID
 		// Upgrade each table/view, one at a time, until we exhaust all of them.
 		for {
-			done, idToUpgrade, err := findNextTableToUpgrade(ctx, d.InternalExecutor, txn, lastUpgradedID,
+			done, idToUpgrade, err := findNextTableToUpgrade(ctx, ie, txn, lastUpgradedID,
 				func(table *descpb.TableDescriptor) bool {
 					return table.IsTable() || table.IsView()
 				})

@@ -841,8 +841,9 @@ func TestGetAllDescriptorsInDatabase(t *testing.T) {
 	sd := sql.NewFakeSessionData(&s0.ClusterSettings().SV)
 	sd.Database = "db"
 	require.NoError(t, tm.DescsTxnWithExecutor(ctx, s0.DB(), sd, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
+		txn, ie := txnEx.Txn, txnEx.InternalExecutor
 		dbDesc, err := descriptors.GetImmutableDatabaseByName(ctx, txn, "db", tree.DatabaseLookupFlags{AvoidLeased: true})
 		if err != nil {
 			return err
@@ -1125,8 +1126,9 @@ SELECT id
 	codec := ec.Codec
 	descIDGen := ec.DescIDGenerator
 	require.NoError(t, ec.InternalExecutorFactory.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 	) error {
+		txn := txnEx.Txn
 		checkImmutableDescriptor := func(id descpb.ID, expName string, f func(t *testing.T, desc catalog.Descriptor)) error {
 			flags := tree.ObjectLookupFlagsWithRequired()
 			flags.IncludeDropped = true

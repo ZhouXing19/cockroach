@@ -37,8 +37,9 @@ func updateInvalidColumnIDsInSequenceBackReferences(
 		var currSeqID descpb.ID
 		var done bool
 		if err := d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+			ctx context.Context, descriptors *descs.Collection, txnEx *sqlutil.TxnExecutor,
 		) (err error) {
+			txn, ie := txnEx.Txn, txnEx.InternalExecutor
 			currSeqID = lastSeqID
 			for {
 				done, currSeqID, err = findNextTableToUpgrade(ctx, ie, txn, currSeqID,
