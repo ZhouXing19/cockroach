@@ -127,6 +127,8 @@ type PreparedPortal struct {
 	// OutFormats contains the requested formats for the output columns.
 	OutFormats []pgwirebase.FormatCode
 
+	StmtRes CommandResult
+
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
 	// rows.

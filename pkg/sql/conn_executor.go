@@ -1979,6 +1979,8 @@ func (ex *connExecutor) execCmd() error {
 		// parsing took no time.
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartParse, time.Time{})
 		ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionEndParse, time.Time{})
+
+		// ------- CHANGE LOGIC HERE.
 		// We use a closure for the body of the execution so as to
 		// guarantee that the full service time is captured below.
 		err := func() error {
@@ -2010,19 +2012,22 @@ func (ex *connExecutor) execCmd() error {
 				Values: portal.Qargs,
 			}
 
-			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.AST,
-				// The client is using the extended protocol, so no row description is
-				// needed.
-				DontNeedRowDesc,
-				pos, portal.OutFormats,
-				ex.sessionData().DataConversionConfig,
-				ex.sessionData().GetLocation(),
-				tcmd.Limit,
-				portalName,
-				ex.implicitTxn(),
-			)
-			res = stmtRes
+			if portal.StmtRes == nil {
+				portal.StmtRes = ex.clientComm.CreateStatementResult(
+					portal.Stmt.AST,
+					// The client is using the extended protocol, so no row description is
+					// needed.
+					DontNeedRowDesc,
+					pos, portal.OutFormats,
+					ex.sessionData().DataConversionConfig,
+					ex.sessionData().GetLocation(),
+					tcmd.Limit,
+					portalName,
+					ex.implicitTxn(),
+				)
+			}
+
+			res = portal.StmtRes
 
 			// In the extended protocol, autocommit is not always allowed. The postgres
 			// docs say that commands in the extended protocol are all treated as an
@@ -2031,7 +2036,7 @@ func (ex *connExecutor) execCmd() error {
 			// followed by Sync (which is the common case), then we still can auto-commit,
 			// which allows the 1PC txn fast path to be used.
 			canAutoCommit := ex.implicitTxn() && tcmd.FollowedBySync
-			ev, payload, err = ex.execPortal(ctx, portal, portalName, stmtRes, pinfo, canAutoCommit)
+			ev, payload, err = ex.execPortal(ctx, portal, portalName, portal.StmtRes, pinfo, canAutoCommit)
 			return err
 		}()
 		// Note: we write to ex.statsCollector.phaseTimes, instead of ex.phaseTimes,
