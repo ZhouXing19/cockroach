@@ -56,3 +56,30 @@ func TestPGTest(t *testing.T) {
 		pgtest.WalkWithRunningServer(t, testutils.TestDataPath(t, "pgtest"), *flagAddr, *flagUser)
 	}
 }
+
+func TestJanePGTest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	if *flagAddr == "" {
+		newServer := func() (addr, user string, cleanup func()) {
+			ctx := context.Background()
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Insecure: true,
+			})
+			cleanup = func() {
+				s.Stopper().Stop(ctx)
+			}
+			addr = s.ServingSQLAddr()
+			user = username.RootUser
+			// None of the tests read that much data, so we hardcode the max message
+			// size to something small. This lets us test the handling of large
+			// query inputs. See the large_input test.
+			_, _ = db.ExecContext(ctx, "SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'")
+			return addr, user, cleanup
+		}
+		pgtest.WalkWithNewServer(t, testutils.TestDataPath(t, "janetest"), newServer)
+	} else {
+		pgtest.WalkWithRunningServer(t, testutils.TestDataPath(t, "janetest"), *flagAddr, *flagUser)
+	}
+}

@@ -1,0 +1,32 @@
+send
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT * FROM generate_series(1, 20)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Parse {"Name": "q2", "Query": "SELECT * FROM generate_series(1, 20)"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p1", "MaxRows": 2}
+Execute {"Portal": "p2", "MaxRows": 2}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
