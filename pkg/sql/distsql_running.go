@@ -1314,17 +1314,10 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	// client (that's why we don't set the error on the resultWriter).
 	if errors.Is(commErr, ErrLimitedResultClosed) {
 		log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
-		r.status = execinfra.DrainRequested
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 		r.status = execinfra.DrainRequested
 	} else {
-		// Set the error on the resultWriter to notify the consumer about
-		// it. Most clients don't care to differentiate between
-		// communication errors and query execution errors, so they can
-		// simply inspect resultWriter.Err().
-		r.SetError(commErr)
-
 		// The only client that needs to know that a communication error and
 		// not a query execution error has occurred is
 		// connExecutor.execWithDistSQLEngine which will inspect r.commErr
@@ -1338,6 +1331,13 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 		// is handled specially here.
 		if !errors.Is(commErr, ErrLimitedResultNotSupported) {
 			r.commErr = commErr
+			// Set the error on the resultWriter to notify the consumer about
+			// it. Most clients don't care to differentiate between
+			// communication errors and query execution errors, so they can
+			// simply inspect resultWriter.Err().
+			r.SetError(commErr)
+		} else {
+			r.status = execinfra.SwitchToAnotherPortal
 		}
 	}
 }

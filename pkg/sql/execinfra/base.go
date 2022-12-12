@@ -48,6 +48,8 @@ const (
 	// rows or metadata. This is also commonly returned in case the consumer has
 	// encountered an error.
 	ConsumerClosed
+
+	SwitchToAnotherPortal
 )
 
 type receiverBase interface {
@@ -196,6 +198,8 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 			case ConsumerClosed:
 				src.ConsumerClosed()
 				dst.ProducerDone()
+				return
+			case SwitchToAnotherPortal:
 				return
 			}
 		}

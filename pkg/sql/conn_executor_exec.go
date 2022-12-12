@@ -226,9 +226,9 @@ func (ex *connExecutor) execPortal(
 		// still don't want to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-			ex.exhaustPortal(portalName)
-		}
+		//if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+		//	ex.exhaustPortal(portalName)
+		//}
 		return ev, payload, err
 
 	default:
