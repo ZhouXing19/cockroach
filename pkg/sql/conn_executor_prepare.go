@@ -425,8 +425,6 @@ func (ex *connExecutor) execBind(
 							typ = types.Json
 						} else if t == oid.T__json {
 							typ = types.JSONArray
-						} else if t == oid.T__jsonb {
-							typ = types.JSONBArray
 						} else {
 							var err error
 							typ, err = ex.planner.ResolveTypeByOID(ctx, t)

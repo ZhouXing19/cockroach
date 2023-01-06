@@ -983,10 +983,6 @@ func (c *conn) handleParse(
 				sqlTypeHints[i] = types.JSONArray
 				continue
 			}
-			if t == oid.T__jsonb {
-				sqlTypeHints[i] = types.JSONBArray
-				continue
-			}
 			v, ok := types.OidToType[t]
 			if !ok {
 				err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)

@@ -1380,9 +1380,6 @@ func (t *T) WithoutTypeModifiers() *T {
 		if t.Oid() == oid.T__json {
 			return JSONArray
 		}
-		if t.Oid() == oid.T__json {
-			return JSONBArray
-		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 	}
 	return typ
