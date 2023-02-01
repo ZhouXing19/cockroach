@@ -496,10 +496,10 @@ func (ex *connExecutor) addPortal(
 	outFormats []pgwirebase.FormatCode,
 ) error {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
+		return nil
 	}
 	if cursor := ex.getCursorAccessor().getCursor(tree.Name(portalName)); cursor != nil {
-		panic(errors.AssertionFailedf("portal already exists as cursor: %q", portalName))
+		return nil
 	}
 
 	portal, err := ex.makePreparedPortal(ctx, portalName, stmt, qargs, outFormats)

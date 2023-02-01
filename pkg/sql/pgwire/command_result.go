@@ -12,7 +12,6 @@ package pgwire
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -492,17 +491,15 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// where it is exactly this portal. We are in effect peeking to see if the
 			// next message is a delete portal.
 			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
-				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
-					"cannot close a portal while a different one is open")
+				r.conn.stmtBuf.Rewind(ctx, prevPos)
+				return sql.ErrLimitedResultNotSupported
 			}
 			return r.rewindAndClosePortal(ctx, prevPos)
 		case sql.ExecPortal:
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
-				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
-					"cannot execute a portal while a different one is open")
+				r.conn.stmtBuf.Rewind(ctx, prevPos)
+				return sql.ErrLimitedResultNotSupported
 			}
 			r.limit = c.Limit
 			// In order to get the correct command tag, we need to reset the seen rows.
@@ -542,10 +539,8 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			} else if isCommit {
 				return r.rewindAndClosePortal(ctx, prevPos)
 			}
-			// We got some other message, but we only support executing to completion.
-			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
-				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
+			r.conn.stmtBuf.Rewind(ctx, prevPos)
+			return sql.ErrLimitedResultNotSupported
 		}
 		prevPos = curPos
 	}

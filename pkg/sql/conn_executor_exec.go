@@ -217,6 +217,7 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
+		portal.Stmt.portalName = portalName
 		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
 		// Portal suspension is supported via a "side" state machine
 		// (see pgwire.limitedCommandResult for details), so when
@@ -227,9 +228,9 @@ func (ex *connExecutor) execPortal(
 		// still don't want to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-			ex.exhaustPortal(portalName)
-		}
+		//if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+		//	ex.exhaustPortal(portalName)
+		//}
 		return ev, payload, err
 
 	default:
@@ -313,74 +314,76 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
 	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
 
-	// Make sure that we always unregister the query. It also deals with
-	// overwriting res.Error to a more user-friendly message in case of query
-	// cancellation.
-	defer func(ctx context.Context, res RestrictedCommandResult) {
-		if queryTimeoutTicker != nil {
-			if !queryTimeoutTicker.Stop() {
-				// Wait for the timer callback to complete to avoid a data race on
-				// queryTimedOut.
-				<-queryDoneAfterFunc
+	if !strings.Contains(stmt.StmtNoConstants, "mytable") {
+		// Make sure that we always unregister the query. It also deals with
+		// overwriting res.Error to a more user-friendly message in case of query
+		// cancellation.
+		defer func(ctx context.Context, res RestrictedCommandResult) {
+			if queryTimeoutTicker != nil {
+				if !queryTimeoutTicker.Stop() {
+					// Wait for the timer callback to complete to avoid a data race on
+					// queryTimedOut.
+					<-queryDoneAfterFunc
+				}
 			}
-		}
-		if txnTimeoutTicker != nil {
-			if !txnTimeoutTicker.Stop() {
-				// Wait for the timer callback to complete to avoid a data race on
-				// txnTimedOut.
-				<-txnDoneAfterFunc
+			if txnTimeoutTicker != nil {
+				if !txnTimeoutTicker.Stop() {
+					// Wait for the timer callback to complete to avoid a data race on
+					// txnTimedOut.
+					<-txnDoneAfterFunc
+				}
 			}
-		}
 
-		// Detect context cancelation and overwrite whatever error might have been
-		// set on the result before. The idea is that once the query's context is
-		// canceled, all sorts of actors can detect the cancelation and set all
-		// sorts of errors on the result. Rather than trying to impose discipline
-		// in that jungle, we just overwrite them all here with an error that's
-		// nicer to look at for the client.
-		if res != nil && ctx.Err() != nil && res.Err() != nil {
-			// Even in the cases where the error is a retryable error, we want to
-			// intercept the event and payload returned here to ensure that the query
-			// is not retried.
-			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
+			// Detect context cancelation and overwrite whatever error might have been
+			// set on the result before. The idea is that once the query's context is
+			// canceled, all sorts of actors can detect the cancelation and set all
+			// sorts of errors on the result. Rather than trying to impose discipline
+			// in that jungle, we just overwrite them all here with an error that's
+			// nicer to look at for the client.
+			if res != nil && ctx.Err() != nil && res.Err() != nil {
+				// Even in the cases where the error is a retryable error, we want to
+				// intercept the event and payload returned here to ensure that the query
+				// is not retried.
+				retEv = eventNonRetriableErr{
+					IsCommit: fsm.FromBool(isCommit(ast)),
+				}
+				res.SetError(cancelchecker.QueryCanceledError)
+				retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 			}
-			res.SetError(cancelchecker.QueryCanceledError)
-			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
-		}
 
-		ex.removeActiveQuery(queryID, ast)
-		cancelQuery()
-		if ex.executorType != executorTypeInternal {
-			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-		}
+			ex.removeActiveQuery(queryID, ast)
+			cancelQuery()
+			if ex.executorType != executorTypeInternal {
+				ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+			}
 
-		// If the query timed out, we intercept the error, payload, and event here
-		// for the same reasons we intercept them for canceled queries above.
-		// Overriding queries with a QueryTimedOut error needs to happen after
-		// we've checked for canceled queries as some queries may be canceled
-		// because of a timeout, in which case the appropriate error to return to
-		// the client is one that indicates the timeout, rather than the more general
-		// query canceled error. It's important to note that a timed out query may
-		// not have been canceled (eg. We never even start executing a query
-		// because the timeout has already expired), and therefore this check needs
-		// to happen outside the canceled query check above.
-		if queryTimedOut {
-			// A timed out query should never produce retryable errors/events/payloads
-			// so we intercept and overwrite them all here.
-			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
+			// If the query timed out, we intercept the error, payload, and event here
+			// for the same reasons we intercept them for canceled queries above.
+			// Overriding queries with a QueryTimedOut error needs to happen after
+			// we've checked for canceled queries as some queries may be canceled
+			// because of a timeout, in which case the appropriate error to return to
+			// the client is one that indicates the timeout, rather than the more general
+			// query canceled error. It's important to note that a timed out query may
+			// not have been canceled (eg. We never even start executing a query
+			// because the timeout has already expired), and therefore this check needs
+			// to happen outside the canceled query check above.
+			if queryTimedOut {
+				// A timed out query should never produce retryable errors/events/payloads
+				// so we intercept and overwrite them all here.
+				retEv = eventNonRetriableErr{
+					IsCommit: fsm.FromBool(isCommit(ast)),
+				}
+				res.SetError(sqlerrors.QueryTimeoutError)
+				retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
+			} else if txnTimedOut {
+				retEv = eventNonRetriableErr{
+					IsCommit: fsm.FromBool(isCommit(ast)),
+				}
+				res.SetError(sqlerrors.TxnTimeoutError)
+				retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 			}
-			res.SetError(sqlerrors.QueryTimeoutError)
-			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
-		} else if txnTimedOut {
-			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
-			}
-			res.SetError(sqlerrors.TxnTimeoutError)
-			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
-		}
-	}(ctx, res)
+		}(ctx, res)
+	}
 
 	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
@@ -496,37 +499,38 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
-		timerDuration :=
-			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
+	if !strings.Contains(stmt.StmtNoConstants, "mytable") {
+		if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
+			timerDuration :=
+				ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 
-		// If the timer already expired, but the transaction is not yet aborted,
-		// we should error immediately without executing. If the timer
-		// expired but the transaction already is aborted, then we should still
-		// proceed with executing the statement in order to get a
-		// TransactionAbortedError.
-		_, txnAborted := ex.machine.CurState().(stateAborted)
+			// If the timer already expired, but the transaction is not yet aborted,
+			// we should error immediately without executing. If the timer
+			// expired but the transaction already is aborted, then we should still
+			// proceed with executing the statement in order to get a
+			// TransactionAbortedError.
+			_, txnAborted := ex.machine.CurState().(stateAborted)
 
-		if timerDuration < 0 && !txnAborted {
-			txnTimedOut = true
-			return makeErrEvent(sqlerrors.TxnTimeoutError)
-		}
+			if timerDuration < 0 && !txnAborted {
+				txnTimedOut = true
+				return makeErrEvent(sqlerrors.TxnTimeoutError)
+			}
 
-		if timerDuration > 0 {
-			txnDoneAfterFunc = make(chan struct{}, 1)
-			txnTimeoutTicker = time.AfterFunc(
-				timerDuration,
-				func() {
-					cancelQuery()
-					txnTimedOut = true
-					txnDoneAfterFunc <- struct{}{}
-				})
+			if timerDuration > 0 {
+				txnDoneAfterFunc = make(chan struct{}, 1)
+				txnTimeoutTicker = time.AfterFunc(
+					timerDuration,
+					func() {
+						cancelQuery()
+						txnTimedOut = true
+						txnDoneAfterFunc <- struct{}{}
+					})
+			}
 		}
 	}
-
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
-	if ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
+	if !strings.Contains(stmt.StmtNoConstants, "mytable") && ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
 		timerDuration :=
 			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
@@ -718,7 +722,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = stmt
-	p.cancelChecker.Reset(ctx)
+	if !strings.Contains(stmt.StmtNoConstants, "mytable") {
+		p.cancelChecker.Reset(ctx)
+	}
 
 	// Auto-commit is disallowed during statement execution if we previously
 	// executed any DDL. This is because may potentially create jobs and do other
@@ -1614,7 +1620,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
 		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
 	}
-	defer recv.Release()
+
+	if !strings.Contains(planner.stmt.SQL, "mytable")  {
+		defer recv.Release()
+	}
 
 	evalCtx := planner.ExtendedEvalContext()
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,

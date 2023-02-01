@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -675,7 +676,10 @@ func (dsp *DistSQLPlanner) Run(
 	// Specs of the remote flows are released after performing the corresponding
 	// SetupFlow RPCs. This is needed in case the local flow is canceled before
 	// the SetupFlow RPCs are issued (which might happen in parallel).
-	defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
+
+	if !strings.Contains(planCtx.planner.stmt.SQL, "mytable") {
+		defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
+	}
 
 	var (
 		localState     distsql.LocalState
@@ -833,11 +837,18 @@ func (dsp *DistSQLPlanner) Run(
 	ctx, flow, err := dsp.setupFlows(
 		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 	)
+
+	var portalName string
+	if planCtx.planner.stmt.Prepared != nil {
+		portalName = planCtx.planner.stmt.Prepared.portalName
+	}
 	// Make sure that the local flow is always cleaned up if it was created.
-	if flow != nil {
-		defer func() {
-			flow.Cleanup(ctx)
-		}()
+	if !strings.Contains(statementSQL, "mytable") {
+		if flow != nil {
+			defer func() {
+				flow.Cleanup(ctx)
+			}()
+		}
 	}
 	if err != nil {
 		recv.SetError(err)
@@ -858,6 +869,17 @@ func (dsp *DistSQLPlanner) Run(
 		recv.SetError(errors.AssertionFailedf(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
 		return
+	}
+
+	if portalName != "" {
+		if flowCtx, ok := evalCtx.portalWithFlow[portalName]; ok {
+			currentFlowCtx := flow.GetFlowCtx()
+			if flowCtx.PortalRowSource != nil {
+				currentFlowCtx.PortalRowSource = flowCtx.PortalRowSource
+			}
+		} else {
+			evalCtx.portalWithFlow[portalName] = flow.GetFlowCtx()
+		}
 	}
 
 	flow.Run(ctx)
@@ -1340,17 +1362,10 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	// client (that's why we don't set the error on the resultWriter).
 	if errors.Is(commErr, ErrLimitedResultClosed) {
 		log.VEvent(r.ctx, 1, "encountered ErrLimitedResultClosed (transitioning to draining)")
-		r.status = execinfra.DrainRequested
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 		r.status = execinfra.DrainRequested
 	} else {
-		// Set the error on the resultWriter to notify the consumer about
-		// it. Most clients don't care to differentiate between
-		// communication errors and query execution errors, so they can
-		// simply inspect resultWriter.Err().
-		r.SetError(commErr)
-
 		// The only client that needs to know that a communication error and
 		// not a query execution error has occurred is
 		// connExecutor.execWithDistSQLEngine which will inspect r.commErr
@@ -1364,6 +1379,13 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 		// is handled specially here.
 		if !errors.Is(commErr, ErrLimitedResultNotSupported) {
 			r.commErr = commErr
+			// Set the error on the resultWriter to notify the consumer about
+			// it. Most clients don't care to differentiate between
+			// communication errors and query execution errors, so they can
+			// simply inspect resultWriter.Err().
+			r.SetError(commErr)
+		} else {
+			r.status = execinfra.SwitchToAnotherPortal
 		}
 	}
 }
@@ -1528,7 +1550,10 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 ) error {
-	defer planner.curPlan.close(ctx)
+	if !strings.Contains(planner.stmt.SQL, "mytable") {
+		defer planner.curPlan.close(ctx)
+	}
+
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we

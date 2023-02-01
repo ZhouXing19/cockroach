@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"io"
 	"math"
 	"math/rand"
@@ -2028,18 +2029,41 @@ func (ex *connExecutor) execCmd() error {
 				Values: portal.Qargs,
 			}
 
-			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.AST,
-				// The client is using the extended protocol, so no row description is
-				// needed.
-				DontNeedRowDesc,
-				pos, portal.OutFormats,
-				ex.sessionData().DataConversionConfig,
-				ex.sessionData().GetLocation(),
-				tcmd.Limit,
-				portalName,
-				ex.implicitTxn(),
-			)
+			// Reuse the res for the same portal.
+			var stmtRes CommandResult
+			if portalName != "" {
+				if portal.cmdRes != nil {
+					stmtRes = portal.cmdRes
+				} else {
+					portal.cmdRes = ex.clientComm.CreateStatementResult(
+						portal.Stmt.AST,
+						// The client is using the extended protocol, so no row description is
+						// needed.
+						DontNeedRowDesc,
+						pos, portal.OutFormats,
+						ex.sessionData().DataConversionConfig,
+						ex.sessionData().GetLocation(),
+						tcmd.Limit,
+						portalName,
+						ex.implicitTxn(),
+					)
+					stmtRes = portal.cmdRes
+				}
+			} else {
+				stmtRes = ex.clientComm.CreateStatementResult(
+					portal.Stmt.AST,
+					// The client is using the extended protocol, so no row description is
+					// needed.
+					DontNeedRowDesc,
+					pos, portal.OutFormats,
+					ex.sessionData().DataConversionConfig,
+					ex.sessionData().GetLocation(),
+					tcmd.Limit,
+					portalName,
+					ex.implicitTxn(),
+				)
+			}
+
 			res = stmtRes
 
 			// In the extended protocol, autocommit is not always allowed. The postgres
@@ -2926,6 +2950,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		jobs:              ex.extraTxnState.jobs,
 		statsProvider:     ex.server.sqlStats,
 		indexUsageStats:   ex.indexUsageStats,
+		portalWithFlow:         make(map[string]*execinfra.FlowCtx),
 		statementPreparer: ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)

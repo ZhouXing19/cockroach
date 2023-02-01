@@ -68,6 +68,8 @@ type PreparedStatement struct {
 	// origin is the protocol in which this prepare statement was created.
 	// Used for reporting on `pg_prepared_statements`.
 	origin PreparedStatementOrigin
+
+	portalName string
 }
 
 // MemoryEstimate returns a rough estimate of the PreparedStatement's memory
@@ -131,6 +133,7 @@ type PreparedPortal struct {
 	// meaning that any additional attempts to execute it should return no
 	// rows.
 	exhausted bool
+	cmdRes    CommandResult
 }
 
 // makePreparedPortal creates a new PreparedPortal.

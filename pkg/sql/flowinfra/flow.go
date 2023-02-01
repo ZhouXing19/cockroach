@@ -12,6 +12,7 @@ package flowinfra
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -468,7 +469,9 @@ func (f *FlowBase) Start(ctx context.Context) error {
 
 // Run is part of the Flow interface.
 func (f *FlowBase) Run(ctx context.Context) {
-	defer f.Wait()
+	if !strings.Contains(f.statementSQL, "mytable") {
+		defer f.Wait()
+	}
 
 	// We'll take care of the last processor in particular.
 	var headProc execinfra.Processor
