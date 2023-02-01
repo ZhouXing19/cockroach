@@ -729,16 +729,8 @@ func (pb *ProcessorBaseNoHelper) Run(ctx context.Context) {
 	if pb.Output == nil {
 		panic("processor output is not set for emitting rows")
 	}
-	var rowSource RowSource
-	if pb.FlowCtx.PortalRowSource == nil {
-		rowSource = pb.self
-		pb.FlowCtx.PortalRowSource = rowSource
-		rowSource.Start(ctx)
-	} else {
-		rowSource = pb.FlowCtx.PortalRowSource
-	}
-	rowSource.Start(ctx)
-	Run(pb.ctx, rowSource, pb.Output)
+	pb.self.Start(ctx)
+	Run(pb.ctx, pb.self, pb.Output)
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions

@@ -13,7 +13,7 @@ package sql
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"io"
 	"math"
 	"math/rand"
@@ -2950,7 +2950,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		jobs:              ex.extraTxnState.jobs,
 		statsProvider:     ex.server.sqlStats,
 		indexUsageStats:   ex.indexUsageStats,
-		portalWithFlow:         make(map[string]*execinfra.FlowCtx),
+		portalWithFlow:    make(map[string]flowinfra.Flow),
 		statementPreparer: ex,
 	}
 	evalCtx.copyFromExecCfg(ex.server.cfg)

@@ -12,7 +12,7 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -107,7 +107,7 @@ type extendedEvalContext struct {
 
 	statementPreparer statementPreparer
 
-	portalWithFlow map[string]*execinfra.FlowCtx
+	portalWithFlow map[string]flowinfra.Flow
 }
 
 // copyFromExecCfg copies relevant fields from an ExecutorConfig.
@@ -486,7 +486,7 @@ func internalExtendedEvalCtx(
 		Tracing:         &SessionTracing{},
 		Descs:           tables,
 		indexUsageStats: indexUsageStats,
-		portalWithFlow:  make(map[string]*execinfra.FlowCtx),
+		portalWithFlow:  make(map[string]flowinfra.Flow),
 	}
 	ret.SetDeprecatedContext(ctx)
 	ret.copyFromExecCfg(execCfg)

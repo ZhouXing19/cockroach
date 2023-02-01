@@ -38,6 +38,5 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"2"}]}
 {"Type":"PortalSuspended"}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
-{"Type":"DataRow","Values":[{"text":"2"}]}
-{"Type":"PortalSuspended"}
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
 {"Type":"ReadyForQuery","TxStatus":"T"}

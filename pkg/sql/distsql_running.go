@@ -677,7 +677,7 @@ func (dsp *DistSQLPlanner) Run(
 	// SetupFlow RPCs. This is needed in case the local flow is canceled before
 	// the SetupFlow RPCs are issued (which might happen in parallel).
 
-	if !strings.Contains(planCtx.planner.stmt.SQL, "mytable") {
+	if planCtx.planner == nil || !strings.Contains(planCtx.planner.stmt.SQL, "mytable") {
 		defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
 	}
 
@@ -834,14 +834,29 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.planner != nil {
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
-	ctx, flow, err := dsp.setupFlows(
-		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
-	)
 
 	var portalName string
-	if planCtx.planner.stmt.Prepared != nil {
+	if planCtx.planner != nil && planCtx.planner.stmt.Prepared != nil {
 		portalName = planCtx.planner.stmt.Prepared.portalName
 	}
+
+	var flow flowinfra.Flow
+	var err error
+	if savedFlow, ok := evalCtx.portalWithFlow[portalName]; ok {
+		flow = savedFlow
+	} else {
+		ctx, flow, err = dsp.setupFlows(
+			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
+		)
+		if err != nil {
+			recv.SetError(err)
+			return
+		}
+		if portalName != "" {
+			evalCtx.portalWithFlow[portalName] = flow
+		}
+	}
+
 	// Make sure that the local flow is always cleaned up if it was created.
 	if !strings.Contains(statementSQL, "mytable") {
 		if flow != nil {
@@ -869,17 +884,6 @@ func (dsp *DistSQLPlanner) Run(
 		recv.SetError(errors.AssertionFailedf(
 			"unexpected concurrency for a flow that was forced to be planned locally"))
 		return
-	}
-
-	if portalName != "" {
-		if flowCtx, ok := evalCtx.portalWithFlow[portalName]; ok {
-			currentFlowCtx := flow.GetFlowCtx()
-			if flowCtx.PortalRowSource != nil {
-				currentFlowCtx.PortalRowSource = flowCtx.PortalRowSource
-			}
-		} else {
-			evalCtx.portalWithFlow[portalName] = flow.GetFlowCtx()
-		}
 	}
 
 	flow.Run(ctx)
