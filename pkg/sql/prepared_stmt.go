@@ -133,7 +133,6 @@ type PreparedPortal struct {
 	// meaning that any additional attempts to execute it should return no
 	// rows.
 	exhausted bool
-	cmdRes    CommandResult
 }
 
 // makePreparedPortal creates a new PreparedPortal.

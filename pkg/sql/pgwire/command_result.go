@@ -444,7 +444,8 @@ type limitedCommandResult struct {
 	seenTuples int
 	// If set, an error will be sent to the client if more rows are produced than
 	// this limit.
-	limit int
+	limit        int
+	reachedLimit bool
 }
 
 // AddRow is part of the sql.RestrictedCommandResult interface.
@@ -461,9 +462,8 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		if err := r.conn.Flush(r.pos); err != nil {
 			return err
 		}
-		r.seenTuples = 0
-
-		return r.moreResultsNeeded(ctx)
+		r.reachedLimit = true
+		return sql.ErrPortalLimitHasBeenReached
 	}
 	return nil
 }
@@ -474,150 +474,11 @@ func (r *limitedCommandResult) SupportsAddBatch() bool {
 	return false
 }
 
-// moreResultsNeeded is a restricted connection handler that waits for more
-// requests for rows from the active portal, during the "execute portal" flow
-// when a limit has been specified.
-func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
-	// Keep track of the previous CmdPos so we can rewind if needed.
-	prevPos := r.conn.stmtBuf.AdvanceOne()
-	for {
-		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
-		if err != nil {
-			return err
-		}
-		switch c := cmd.(type) {
-		case sql.DeletePreparedStmt:
-			// The client wants to close a portal or statement. We support the case
-			// where it is exactly this portal. We are in effect peeking to see if the
-			// next message is a delete portal.
-			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
-				r.conn.stmtBuf.Rewind(ctx, prevPos)
-				return sql.ErrLimitedResultNotSupported
-			}
-			return r.rewindAndClosePortal(ctx, prevPos)
-		case sql.ExecPortal:
-			// The happy case: the client wants more rows from the portal.
-			if c.Name != r.portalName {
-				r.conn.stmtBuf.Rewind(ctx, prevPos)
-				return sql.ErrLimitedResultNotSupported
-			}
-			r.limit = c.Limit
-			// In order to get the correct command tag, we need to reset the seen rows.
-			r.rowsAffected = 0
-			return nil
-		case sql.Sync:
-			if r.implicitTxn {
-				// Implicit transactions should treat a Sync as an auto-commit. This
-				// needs to be handled in conn_executor.
-				return r.rewindAndClosePortal(ctx, prevPos)
-			}
-			// The client wants to see a ready for query message
-			// back. Send it then run the for loop again.
-			r.conn.stmtBuf.AdvanceOne()
-			// Trim old statements to reclaim memory. We need to perform this clean up
-			// here as the conn_executor cleanup is not executed because of the
-			// limitedCommandResult side state machine.
-			r.conn.stmtBuf.Ltrim(ctx, prevPos)
-			// We can hard code InTxnBlock here because implicit transactions are
-			// handled above.
-			r.conn.bufferReadyForQuery(byte(sql.InTxnBlock))
-			if err := r.conn.Flush(r.pos); err != nil {
-				return err
-			}
-		case sql.Flush:
-			// Flush has no client response, so just advance the position and flush
-			// any existing results.
-			r.conn.stmtBuf.AdvanceOne()
-			if err := r.conn.Flush(r.pos); err != nil {
-				return err
-			}
-		default:
-			// If the portal is immediately followed by a COMMIT, we can proceed and
-			// let the portal be destroyed at the end of the transaction.
-			if isCommit, err := r.isCommit(); err != nil {
-				return err
-			} else if isCommit {
-				return r.rewindAndClosePortal(ctx, prevPos)
-			}
-			r.conn.stmtBuf.Rewind(ctx, prevPos)
-			return sql.ErrLimitedResultNotSupported
-		}
-		prevPos = curPos
+func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
+	if r.reachedLimit {
+		r.commandResult.typ = noCompletionMsg
 	}
-}
-
-// isCommit checks if the statement buffer has a COMMIT at the current
-// position. It may either be (1) a COMMIT in the simple protocol, or (2) a
-// Parse/Bind/Execute sequence for a COMMIT query.
-func (r *limitedCommandResult) isCommit() (bool, error) {
-	cmd, _, err := r.conn.stmtBuf.CurCmd()
-	if err != nil {
-		return false, err
-	}
-	// Case 1: Check if cmd is a simple COMMIT statement.
-	if execStmt, ok := cmd.(sql.ExecStmt); ok {
-		if _, isCommit := execStmt.AST.(*tree.CommitTransaction); isCommit {
-			return true, nil
-		}
-	}
-
-	commitStmtName := ""
-	commitPortalName := ""
-	// Case 2a: Check if cmd is a prepared COMMIT statement.
-	if prepareStmt, ok := cmd.(sql.PrepareStmt); ok {
-		if _, isCommit := prepareStmt.AST.(*tree.CommitTransaction); isCommit {
-			commitStmtName = prepareStmt.Name
-		} else {
-			return false, nil
-		}
-	} else {
-		return false, nil
-	}
-
-	r.conn.stmtBuf.AdvanceOne()
-	cmd, _, err = r.conn.stmtBuf.CurCmd()
-	if err != nil {
-		return false, err
-	}
-	// Case 2b: The next cmd must be a bind command.
-	if bindStmt, ok := cmd.(sql.BindStmt); ok {
-		// This bind command must be for the COMMIT statement that we just saw.
-		if bindStmt.PreparedStatementName == commitStmtName {
-			commitPortalName = bindStmt.PortalName
-		} else {
-			return false, nil
-		}
-	} else {
-		return false, nil
-	}
-
-	r.conn.stmtBuf.AdvanceOne()
-	cmd, _, err = r.conn.stmtBuf.CurCmd()
-	if err != nil {
-		return false, err
-	}
-	// Case 2c: The next cmd must be an exec portal command.
-	if execPortal, ok := cmd.(sql.ExecPortal); ok {
-		// This exec command must be for the portal that was just bound.
-		if execPortal.Name == commitPortalName {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// rewindAndClosePortal closes the portal in the same way implicit transactions
-// do, but also rewinds the stmtBuf to still point to the portal close so that
-// the state machine can do its part of the cleanup.
-func (r *limitedCommandResult) rewindAndClosePortal(
-	ctx context.Context, rewindTo sql.CmdPos,
-) error {
-	// Don't send an CommandComplete for the portal; it got suspended.
-	r.typ = noCompletionMsg
-	// Rewind to before the delete so the AdvanceOne in connExecutor.execCmd ends
-	// up back on it.
-	r.conn.stmtBuf.Rewind(ctx, rewindTo)
-	return sql.ErrLimitedResultClosed
+	r.commandResult.Close(ctx, t)
 }
 
 // Get the column index for job id based on the result header defined in

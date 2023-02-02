@@ -89,6 +89,8 @@ type Flow interface {
 	// It needs to be called after Setup() and before Start/Run.
 	SetTxn(*kv.Txn)
 
+	SetNewRowSyncFlowConsumer(execinfra.RowReceiver)
+
 	// Start starts the flow. Processors run asynchronously in their own
 	// goroutines. Wait() needs to be called to wait for the flow to finish.
 	// See Run() for a synchronous version.
@@ -245,6 +247,10 @@ func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.EvalCtx.Txn = txn
 }
 
+func (f *FlowBase) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) {
+	f.rowSyncFlowConsumer = receiver
+}
+
 // ConcurrentTxnUse is part of the Flow interface.
 func (f *FlowBase) ConcurrentTxnUse() bool {
 	numProcessorsThatMightUseTxn := 0
@@ -367,6 +373,10 @@ func (f *FlowBase) GetCancelFlowFn() context.CancelFunc {
 // processors. This is used to set up the vectorized flow.
 func (f *FlowBase) SetProcessors(processors []execinfra.Processor) {
 	f.processors = processors
+}
+
+func (f *FlowBase) GetProcessors() []execinfra.Processor {
+	return f.processors
 }
 
 // AddRemoteStream adds a remote stream to this flow.

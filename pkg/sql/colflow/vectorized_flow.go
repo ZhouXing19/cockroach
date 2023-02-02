@@ -288,6 +288,11 @@ func (f *vectorizedFlow) Setup(
 	return ctx, opChains, nil
 }
 
+func (f *vectorizedFlow) SetNewRowSyncFlowConsumer(receiver execinfra.RowReceiver) {
+	f.FlowBase.SetNewRowSyncFlowConsumer(receiver)
+	f.creator.flowCreatorHelper.updateOutputOnFlowCoordinator(receiver)
+}
+
 // Run is part of the Flow interface.
 func (f *vectorizedFlow) Run(ctx context.Context) {
 	if f.batchFlowCoordinator == nil {
@@ -511,6 +516,7 @@ type flowCreatorHelper interface {
 	// addFlowCoordinator adds the FlowCoordinator to the flow. This is only
 	// done on the gateway node.
 	addFlowCoordinator(coordinator *FlowCoordinator)
+	updateOutputOnFlowCoordinator(output execinfra.RowReceiver)
 	// getCtxDone returns done channel of the context of this flow.
 	getFlowCtxDone() <-chan struct{}
 	// getCancelFlowFn returns a flow cancellation function.
@@ -1330,6 +1336,13 @@ func (r *vectorizedFlowCreatorHelper) addFlowCoordinator(f *FlowCoordinator) {
 	r.f.SetProcessors(r.processors)
 }
 
+func (r *vectorizedFlowCreatorHelper) updateOutputOnFlowCoordinator(
+	receiver execinfra.RowReceiver,
+) {
+	// TODO: add assertion for this.
+	r.processors[0].(*FlowCoordinator).UpdateOutput(receiver)
+}
+
 func (r *vectorizedFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return r.f.GetCtxDone()
 }
@@ -1388,6 +1401,8 @@ func (r *noopFlowCreatorHelper) checkInboundStreamID(sid execinfrapb.StreamID) e
 func (r *noopFlowCreatorHelper) accumulateAsyncComponent(runFn) {}
 
 func (r *noopFlowCreatorHelper) addFlowCoordinator(coordinator *FlowCoordinator) {}
+
+func (r *noopFlowCreatorHelper) updateOutputOnFlowCoordinator(receiver execinfra.RowReceiver) {}
 
 func (r *noopFlowCreatorHelper) getFlowCtxDone() <-chan struct{} {
 	return nil

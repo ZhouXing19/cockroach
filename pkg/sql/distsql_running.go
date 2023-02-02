@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -843,6 +842,7 @@ func (dsp *DistSQLPlanner) Run(
 	var flow flowinfra.Flow
 	var err error
 	if savedFlow, ok := evalCtx.portalWithFlow[portalName]; ok {
+		savedFlow.SetNewRowSyncFlowConsumer(recv)
 		flow = savedFlow
 	} else {
 		ctx, flow, err = dsp.setupFlows(
@@ -886,6 +886,9 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
+	// TODO: this will need to be updated (maybe a boolean in FlowCtx, or a new
+	// method in Flow interface).
+	// Flow.Resume(newOutput execinfra.RowReceiver)
 	flow.Run(ctx)
 }
 
@@ -1369,6 +1372,8 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 	} else if errors.Is(commErr, errIEResultChannelClosed) {
 		log.VEvent(r.ctx, 1, "encountered errIEResultChannelClosed (transitioning to draining)")
 		r.status = execinfra.DrainRequested
+	} else if errors.Is(commErr, ErrPortalLimitHasBeenReached) {
+		r.status = execinfra.SwitchToAnotherPortal
 	} else {
 		// The only client that needs to know that a communication error and
 		// not a query execution error has occurred is
@@ -1381,16 +1386,13 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 		// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead of
 		// changing the signature of AddRow, we have a sentinel error that
 		// is handled specially here.
-		if !errors.Is(commErr, ErrLimitedResultNotSupported) {
-			r.commErr = commErr
-			// Set the error on the resultWriter to notify the consumer about
-			// it. Most clients don't care to differentiate between
-			// communication errors and query execution errors, so they can
-			// simply inspect resultWriter.Err().
-			r.SetError(commErr)
-		} else {
-			r.status = execinfra.SwitchToAnotherPortal
-		}
+		// TODO: update comment.
+		r.commErr = commErr
+		// Set the error on the resultWriter to notify the consumer about
+		// it. Most clients don't care to differentiate between
+		// communication errors and query execution errors, so they can
+		// simply inspect resultWriter.Err().
+		r.SetError(commErr)
 	}
 }
 
@@ -1527,12 +1529,10 @@ func (r *DistSQLReceiver) PushBatch(
 }
 
 var (
-	// ErrLimitedResultNotSupported is an error produced by pgwire
-	// indicating an unsupported feature of row count limits was attempted.
-	ErrLimitedResultNotSupported = unimplemented.NewWithIssue(40195, "multiple active portals not supported")
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.
-	ErrLimitedResultClosed = errors.New("row count limit closed")
+	ErrLimitedResultClosed       = errors.New("row count limit closed")
+	ErrPortalLimitHasBeenReached = errors.New("limit has been reached")
 )
 
 // ProducerDone is part of the execinfra.RowReceiver interface.
