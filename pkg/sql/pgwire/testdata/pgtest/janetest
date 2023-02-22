@@ -40,12 +40,12 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
 
+
 send
 Execute {"Portal": "p4", "MaxRows": 2}
 Execute {"Portal": "p3", "MaxRows": 2}
 Sync
 ----
-
 
 until
 ReadyForQuery
@@ -55,3 +55,161 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"3"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Parse {"Name": "q5", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "q5"}
+Execute {"Portal": "p3", "MaxRows": 2}
+Sync
+----
+
+# cursor \"p3\" already exists
+until
+ErrorResponse
+----
+{"Type":"ParseComplete"}
+{"Type":"ErrorResponse","Code":"42P03"}
+
+send
+Query {"String": "COMMIT"}
+Sync
+----
+
+# Rollback
+until
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"E"}
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "CREATE TABLE mytable (x int)"}
+Query {"String": "INSERT INTO mytable VALUES (1),(2),(3)"}
+Parse {"Name": "q1", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Parse {"Name": "q2", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "q2"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p2", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Execute {"Portal": "p1", "MaxRows": 2}
+Sync
+----
+
+# p1 doesn't exist
+until
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"34000"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "DROP TABLE mytable"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+send
+Query {"String": "BEGIN"}
+Query {"String": "CREATE TABLE mytable (x int)"}
+Query {"String": "INSERT INTO mytable VALUES (1),(2),(3)"}
+Parse {"Name": "q7", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p7", "PreparedStatement": "q7"}
+Execute {"Portal": "p7", "MaxRows": 1}
+Sync
+----
+
+
+until
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "DROP TABLE mytable"}
+----
+
+# cannot DROP TABLE \"mytable\" because it is being used by active queries in this session
+until noncrdb_only
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"ErrorResponse","Code":"55006"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
+Query {"String": "COMMIT"}
+----
+
+until noncrdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
