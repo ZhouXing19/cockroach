@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/errors"
 	"time"
 	"unsafe"
 
@@ -132,7 +133,31 @@ type PreparedPortal struct {
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
 	// rows.
-	exhausted bool
+	exhausted        bool
+	sqlStmt          *Statement
+	CleanupFuncHooks []func() error
+}
+
+func (p *PreparedPortal) AddCleanupFunc(f func() error) {
+	p.CleanupFuncHooks = append(p.CleanupFuncHooks, f)
+}
+
+func (p *PreparedPortal) RunLastCleanupFunc() error {
+	if len(p.CleanupFuncHooks) == 0 {
+		return errors.New("no clean up func to run")
+	}
+	f := p.CleanupFuncHooks[len(p.CleanupFuncHooks)-1]
+	p.CleanupFuncHooks = p.CleanupFuncHooks[:len(p.CleanupFuncHooks)-1]
+	return f()
+}
+
+func (p *PreparedPortal) RunAllCleanUpFuncs() error {
+	for len(p.CleanupFuncHooks) > 0 {
+		if err := p.RunLastCleanupFunc(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // makePreparedPortal creates a new PreparedPortal.

@@ -675,10 +675,7 @@ func (dsp *DistSQLPlanner) Run(
 	// Specs of the remote flows are released after performing the corresponding
 	// SetupFlow RPCs. This is needed in case the local flow is canceled before
 	// the SetupFlow RPCs are issued (which might happen in parallel).
-
-	if planCtx.planner == nil || !strings.Contains(planCtx.planner.stmt.SQL, "mytable") {
-		defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
-	}
+	defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
 
 	var (
 		localState     distsql.LocalState
@@ -1554,9 +1551,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	recv *DistSQLReceiver,
 	evalCtxFactory func(usedConcurrently bool) *extendedEvalContext,
 ) error {
-	if !strings.Contains(planner.stmt.SQL, "mytable") {
-		defer planner.curPlan.close(ctx)
-	}
+	defer planner.curPlan.close(ctx)
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		// Create a separate memory account for the results of the subqueries.

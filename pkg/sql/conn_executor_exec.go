@@ -499,38 +499,36 @@ func (ex *connExecutor) execStmtInOpenState(
 		}()
 	}
 
-	if !strings.Contains(stmt.StmtNoConstants, "mytable") {
-		if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
-			timerDuration :=
-				ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
+	if ex.sessionData().TransactionTimeout > 0 && !ex.implicitTxn() {
+		timerDuration :=
+			ex.sessionData().TransactionTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionTransactionStarted))
 
-			// If the timer already expired, but the transaction is not yet aborted,
-			// we should error immediately without executing. If the timer
-			// expired but the transaction already is aborted, then we should still
-			// proceed with executing the statement in order to get a
-			// TransactionAbortedError.
-			_, txnAborted := ex.machine.CurState().(stateAborted)
+		// If the timer already expired, but the transaction is not yet aborted,
+		// we should error immediately without executing. If the timer
+		// expired but the transaction already is aborted, then we should still
+		// proceed with executing the statement in order to get a
+		// TransactionAbortedError.
+		_, txnAborted := ex.machine.CurState().(stateAborted)
 
-			if timerDuration < 0 && !txnAborted {
-				txnTimedOut = true
-				return makeErrEvent(sqlerrors.TxnTimeoutError)
-			}
+		if timerDuration < 0 && !txnAborted {
+			txnTimedOut = true
+			return makeErrEvent(sqlerrors.TxnTimeoutError)
+		}
 
-			if timerDuration > 0 {
-				txnDoneAfterFunc = make(chan struct{}, 1)
-				txnTimeoutTicker = time.AfterFunc(
-					timerDuration,
-					func() {
-						cancelQuery()
-						txnTimedOut = true
-						txnDoneAfterFunc <- struct{}{}
-					})
-			}
+		if timerDuration > 0 {
+			txnDoneAfterFunc = make(chan struct{}, 1)
+			txnTimeoutTicker = time.AfterFunc(
+				timerDuration,
+				func() {
+					cancelQuery()
+					txnTimedOut = true
+					txnDoneAfterFunc <- struct{}{}
+				})
 		}
 	}
 	// We exempt `SET` statements from the statement timeout, particularly so as
 	// not to block the `SET statement_timeout` command itself.
-	if !strings.Contains(stmt.StmtNoConstants, "mytable") && ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
+	if ex.sessionData().StmtTimeout > 0 && ast.StatementTag() != "SET" {
 		timerDuration :=
 			ex.sessionData().StmtTimeout - timeutil.Since(ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived))
 		// There's no need to proceed with execution if the timer has already expired.
@@ -722,9 +720,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = stmt
-	if !strings.Contains(stmt.StmtNoConstants, "mytable") {
-		p.cancelChecker.Reset(ctx)
-	}
+	p.cancelChecker.Reset(ctx)
 
 	// Auto-commit is disallowed during statement execution if we previously
 	// executed any DDL. This is because may potentially create jobs and do other
@@ -1621,7 +1617,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
 	}
 
-	if !strings.Contains(planner.stmt.SQL, "mytable")  {
+	if !strings.Contains(planner.stmt.SQL, "mytable") {
 		defer recv.Release()
 	}
 

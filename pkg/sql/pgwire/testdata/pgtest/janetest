@@ -5,7 +5,7 @@ Query {"String": "SET CLUSTER SETTING sql.defaults.multiple_active_portals.enabl
 until crdb_only
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting global default sql.defaults.multiple_active_portals.enabled is not recommended","Detail":"","Hint":"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/dev/alter-role.html#set-default-session-variable-values-for-a-role","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"set_cluster_setting.go","Line":233,"Routine":"startExec","UnknownFields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting global default sql.defaults.multiple_active_portals.enabled is not recommended","Detail":"","Hint":"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/v23.1/alter-role.html#set-default-session-variable-values-for-a-role","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"set_cluster_setting.go","Line":233,"Routine":"startExec","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
