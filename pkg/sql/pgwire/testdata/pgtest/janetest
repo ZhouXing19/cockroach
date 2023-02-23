@@ -1,3 +1,15 @@
+send crdb_only
+Query {"String": "SET CLUSTER SETTING sql.defaults.multiple_active_portals.enabled = true"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting global default sql.defaults.multiple_active_portals.enabled is not recommended","Detail":"","Hint":"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/dev/alter-role.html#set-default-session-variable-values-for-a-role","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"set_cluster_setting.go","Line":233,"Routine":"startExec","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
 send
 Query {"String": "BEGIN"}
 Query {"String": "CREATE TABLE mytable (x int)"}
@@ -42,6 +54,7 @@ ReadyForQuery
 
 
 send
+Query {"String": "UPDATE mytable SET x = 10"}
 Execute {"Portal": "p4", "MaxRows": 2}
 Execute {"Portal": "p3", "MaxRows": 2}
 Sync
@@ -49,7 +62,10 @@ Sync
 
 until
 ReadyForQuery
+ReadyForQuery
 ----
+{"Type":"CommandComplete","CommandTag":"UPDATE 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"DataRow","Values":[{"text":"3"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"DataRow","Values":[{"text":"3"}]}
@@ -58,6 +74,22 @@ ReadyForQuery
 
 send
 Parse {"Name": "q5", "Query": "SELECT * FROM mytable"}
+Bind {"DestinationPortal": "p5", "PreparedStatement": "q5"}
+Execute {"Portal": "p5", "MaxRows": 2}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send
 Bind {"DestinationPortal": "p3", "PreparedStatement": "q5"}
 Execute {"Portal": "p3", "MaxRows": 2}
 Sync
@@ -67,7 +99,6 @@ Sync
 until
 ErrorResponse
 ----
-{"Type":"ParseComplete"}
 {"Type":"ErrorResponse","Code":"42P03"}
 
 send
