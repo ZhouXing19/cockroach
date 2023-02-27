@@ -881,6 +881,13 @@ func (p *PlanningCtx) IsLocal() bool {
 	return p.isLocal
 }
 
+func (p *PlanningCtx) GetPortalName() (string, bool) {
+	if p.planner != nil && p.planner.stmt.Prepared != nil && p.planner.stmt.Prepared.portalMeta != nil {
+		return p.planner.stmt.Prepared.portalMeta.PortalName, true
+	}
+	return "", false
+}
+
 // getDefaultSaveFlowsFunc returns the default function used to save physical
 // plans and their diagrams. The returned function is **not** concurrency-safe.
 func (p *PlanningCtx) getDefaultSaveFlowsFunc(

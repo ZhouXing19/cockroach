@@ -15,7 +15,6 @@ import (
 	"fmt"
 	"math"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -831,10 +830,7 @@ func (dsp *DistSQLPlanner) Run(
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
 
-	var portalName string
-	if planCtx.planner != nil && planCtx.planner.stmt.Prepared != nil {
-		portalName = planCtx.planner.stmt.Prepared.portalName
-	}
+	portalName, isForPortal := planCtx.GetPortalName()
 
 	var flow flowinfra.Flow
 	var err error
@@ -845,18 +841,18 @@ func (dsp *DistSQLPlanner) Run(
 		ctx, flow, err = dsp.setupFlows(
 			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 		)
+		flow.SetToReuse()
 		if err != nil {
 			recv.SetError(err)
 			return
 		}
-		if portalName != "" {
+		if isForPortal {
 			evalCtx.portalWithFlow[portalName] = flow
 		}
 	}
-
-	// Make sure that the local flow is always cleaned up if it was created.
-	if !strings.Contains(statementSQL, "mytable") {
-		if flow != nil {
+	if flow != nil {
+		// Make sure that the local flow is always cleaned up if it was created.
+		if !(isForPortal && enableMultipleActivePortals.Get(&dsp.st.SV)) {
 			defer func() {
 				flow.Cleanup(ctx)
 			}()

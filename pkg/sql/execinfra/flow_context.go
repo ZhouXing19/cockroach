@@ -106,7 +106,7 @@ type FlowCtx struct {
 	// The gateway flow is handled by the connExecutor.
 	TenantCPUMonitor multitenantcpu.CPUUsageHelper
 
-	PortalRowSource RowSource
+	ToReuse bool
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.

@@ -121,6 +121,12 @@ type canModifySchema interface {
 	modifiesSchema() bool
 }
 
+// IsReadOnly returns true if the stmt cannot either modify the schema or
+// write data.
+func IsReadOnly(stmt Statement) bool {
+	return !(CanModifySchema(stmt) || CanWriteData(stmt))
+}
+
 // CanModifySchema returns true if the statement can modify
 // the database schema.
 func CanModifySchema(stmt Statement) bool {

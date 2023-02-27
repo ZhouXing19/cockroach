@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
@@ -125,19 +126,25 @@ func (ex *connExecutor) execStmtInOpenStateSetup(
 	prepared *PreparedStatement,
 	pinfo *tree.PlaceholderInfo,
 	res RestrictedCommandResult,
-	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	// TODO(jane): I feel this should happen only once. To confirm.
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
 	// TODO(andrei): Consider adding the placeholders as tags too.
 	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
-	portal.AddCleanupFunc(func() error {
+	var cleanupFuncs []func()
+	var foundError bool
+	defer func() {
+		if foundError {
+			for _, f := range cleanupFuncs {
+				f()
+			}
+		}
+	}()
+	cleanupFuncs = append(cleanupFuncs, func() {
 		sp.Finish()
-		return nil
 	})
 	ast := portal.sqlStmt.AST
 	ctx = withStatement(ctx, ast)
-
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
 		return ev, payload, nil
@@ -162,11 +169,10 @@ func (ex *connExecutor) execStmtInOpenStateSetup(
 
 	ex.incrementStartedStmtCounter(ast)
 
-	portal.AddCleanupFunc(func() error {
+	cleanupFuncs = append(cleanupFuncs, func() {
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(ast)
 		}
-		return nil
 	})
 
 	func(st *txnState) {
@@ -184,7 +190,7 @@ func (ex *connExecutor) execStmtInOpenStateSetup(
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
 	// cancellation.
-	portal.AddCleanupFunc(func() error {
+	cleanupFuncs = append(cleanupFuncs, func() {
 		if tt.queryTimeoutTicker != nil {
 			if !tt.queryTimeoutTicker.Stop() {
 				// Wait for the timer callback to complete to avoid a data race on
@@ -248,7 +254,6 @@ func (ex *connExecutor) execStmtInOpenStateSetup(
 			res.SetError(sqlerrors.TxnTimeoutError)
 			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
 		}
-		return nil
 	})
 
 	if ex.executorType != executorTypeInternal {
@@ -264,17 +269,11 @@ func (ex *connExecutor) execStmtInOpenStateExec(
 	res RestrictedCommandResult,
 	tt *timeoutTracker,
 	pinfo *tree.PlaceholderInfo,
+	makeErrEvent func(err error) (fsm.Event, fsm.EventPayload, error),
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, portal.sqlStmt.AST)
-		return ev, payload, nil
-	}
-
 	if tt == nil {
 		return makeErrEvent(errors.New("timeoutTracker cannot be nil"))
 	}
-
 	if tree.CanWriteData(portal.sqlStmt.AST) || tree.CanModifySchema(portal.sqlStmt.AST) {
 		return makeErrEvent(errors.New("multiple active portals only allow read-only queries"))
 	}
@@ -505,4 +504,21 @@ func (ex *connExecutor) execStmtInOpenStateExec(
 	// No event was generated.
 	return nil, nil, nil
 
+}
+
+func (ex *connExecutor) dispatchToExecutionEngineSetup(
+	ctx context.Context, planner *planner, res RestrictedCommandResult,
+) error {
+	stmt := planner.stmt
+	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
+	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
+
+	if multitenant.TenantRUEstimateEnabled.Get(ex.server.cfg.SV()) {
+		if server := ex.server.cfg.DistSQLSrv; server != nil {
+			// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
+			ex.cpuStatsCollector.StartCollection(ctx, server.TenantCostController)
+		}
+	}
+
+	return nil
 }

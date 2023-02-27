@@ -12,7 +12,6 @@ package flowinfra
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"unsafe"
 
@@ -164,6 +163,10 @@ type Flow interface {
 	// more than one goroutine will be using a txn.
 	// Can only be called after Setup().
 	ConcurrentTxnUse() bool
+
+	SetToReuse()
+
+	IsToReuse() bool
 }
 
 // FlowBase is the shared logic between row based and vectorized flows. It
@@ -263,6 +266,14 @@ func (f *FlowBase) ConcurrentTxnUse() bool {
 		}
 	}
 	return false
+}
+
+func (f *FlowBase) SetToReuse() {
+	f.ToReuse = true
+}
+
+func (f *FlowBase) IsToReuse() bool {
+	return f.ToReuse
 }
 
 // SetStartedGoroutines sets FlowBase.startedGoroutines to the passed in value.
@@ -479,7 +490,7 @@ func (f *FlowBase) Start(ctx context.Context) error {
 
 // Run is part of the Flow interface.
 func (f *FlowBase) Run(ctx context.Context) {
-	if !strings.Contains(f.statementSQL, "mytable") {
+	if !f.IsToReuse() {
 		defer f.Wait()
 	}
 

@@ -12,7 +12,6 @@ package sql
 
 import (
 	"context"
-	"github.com/cockroachdb/errors"
 	"time"
 	"unsafe"
 
@@ -39,6 +38,10 @@ const (
 	// statement came from a call to crdb_internal.deserialize_session.
 	PreparedStatementOriginSessionMigration
 )
+
+type PortalMeta struct {
+	PortalName string
+}
 
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
@@ -70,7 +73,7 @@ type PreparedStatement struct {
 	// Used for reporting on `pg_prepared_statements`.
 	origin PreparedStatementOrigin
 
-	portalName string
+	portalMeta *PortalMeta
 }
 
 // MemoryEstimate returns a rough estimate of the PreparedStatement's memory
@@ -135,29 +138,26 @@ type PreparedPortal struct {
 	// rows.
 	exhausted        bool
 	sqlStmt          *Statement
-	CleanupFuncHooks []func() error
+	CleanupFuncHooks [][]func()
 }
 
-func (p *PreparedPortal) AddCleanupFunc(f func() error) {
+func (p *PreparedPortal) AddCleanupFuncs(f []func()) {
 	p.CleanupFuncHooks = append(p.CleanupFuncHooks, f)
 }
 
-func (p *PreparedPortal) RunLastCleanupFunc() error {
-	if len(p.CleanupFuncHooks) == 0 {
-		return errors.New("no clean up func to run")
+func (p *PreparedPortal) RunLastCleanupFuncs() {
+	fs := p.CleanupFuncHooks[len(p.CleanupFuncHooks)-1]
+	for i := len(fs) - 1; i >= 0; i-- {
+		fs[i]()
 	}
-	f := p.CleanupFuncHooks[len(p.CleanupFuncHooks)-1]
 	p.CleanupFuncHooks = p.CleanupFuncHooks[:len(p.CleanupFuncHooks)-1]
-	return f()
+
 }
 
-func (p *PreparedPortal) RunAllCleanUpFuncs() error {
+func (p *PreparedPortal) RunAllCleanUpFuncs() {
 	for len(p.CleanupFuncHooks) > 0 {
-		if err := p.RunLastCleanupFunc(); err != nil {
-			return err
-		}
+		p.RunLastCleanupFuncs()
 	}
-	return nil
 }
 
 // makePreparedPortal creates a new PreparedPortal.

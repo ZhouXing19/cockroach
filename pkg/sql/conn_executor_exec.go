@@ -217,7 +217,7 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
-		portal.Stmt.portalName = portalName
+		portal.Stmt.portalMeta = &PortalMeta{PortalName: portalName}
 		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
 		// Portal suspension is supported via a "side" state machine
 		// (see pgwire.limitedCommandResult for details), so when
@@ -287,6 +287,10 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt = makeStatement(parserStmt, queryID)
 	}
 
+	var isReadOnlyPortal bool
+	if prepared != nil && prepared.portalMeta != nil && tree.IsReadOnly(prepared.AST) {
+		isReadOnlyPortal = true
+	}
 	ex.incrementStartedStmtCounter(ast)
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
@@ -314,7 +318,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
 	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
 
-	if !strings.Contains(stmt.StmtNoConstants, "mytable") {
+	if true {
 		// Make sure that we always unregister the query. It also deals with
 		// overwriting res.Error to a more user-friendly message in case of query
 		// cancellation.
@@ -351,10 +355,12 @@ func (ex *connExecutor) execStmtInOpenState(
 				retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 			}
 
-			ex.removeActiveQuery(queryID, ast)
-			cancelQuery()
-			if ex.executorType != executorTypeInternal {
-				ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+			if !(isReadOnlyPortal && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)) {
+				ex.removeActiveQuery(queryID, ast)
+				cancelQuery()
+				if ex.executorType != executorTypeInternal {
+					ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+				}
 			}
 
 			// If the query timed out, we intercept the error, payload, and event here
@@ -1617,9 +1623,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
 	}
 
-	if !strings.Contains(planner.stmt.SQL, "mytable") {
-		defer recv.Release()
-	}
+	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
 	planCtx := ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner,
