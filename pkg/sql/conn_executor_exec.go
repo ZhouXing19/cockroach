@@ -217,7 +217,9 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
-		portal.Stmt.portalMeta = &PortalMeta{PortalName: portalName}
+		if portal.Stmt.portalMeta == nil {
+			portal.Stmt.portalMeta = &PortalMeta{PortalName: portalName, CleanupFuncHooks: make([][]NamedFunc, 0)}
+		}
 		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
 		// Portal suspension is supported via a "side" state machine
 		// (see pgwire.limitedCommandResult for details), so when
@@ -228,9 +230,12 @@ func (ex *connExecutor) execPortal(
 		// still don't want to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		//if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-		//	ex.exhaustPortal(portalName)
-		//}
+		if p, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
+			if !p.Stmt.portalMeta.HaveAddedCleanupFunc {
+				p.Stmt.portalMeta.AppendCleanupFunc([]NamedFunc{{FName: "exhaust portal", F: func() { ex.exhaustPortal(portalName) }}})
+				p.Stmt.portalMeta.HaveAddedCleanupFunc = true
+			}
+		}
 		return ev, payload, err
 
 	default:
@@ -259,6 +264,20 @@ func (ex *connExecutor) execStmtInOpenState(
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	var hadError bool
+	cleanupFuncs := make([]NamedFunc, 0)
+
+	defer func() {
+		if hadError {
+			for _, f := range cleanupFuncs {
+				f.F()
+			}
+		} else {
+			if prepared != nil && prepared.portalMeta != nil && prepared.portalMeta.CleanupFuncHooks != nil && !prepared.portalMeta.HaveAddedCleanupFunc {
+				prepared.portalMeta.AppendCleanupFunc(cleanupFuncs)
+			}
+		}
+	}()
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
 	// TODO(andrei): Consider adding the placeholders as tags too.
 	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
@@ -268,11 +287,27 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, ast)
+		hadError = true
 		return ev, payload, nil
 	}
 
+	var isReadOnlyPortal bool
+	if prepared != nil && prepared.portalMeta != nil && tree.IsReadOnly(prepared.AST) {
+		isReadOnlyPortal = true
+	}
+
 	var stmt Statement
-	queryID := ex.generateID()
+	var queryID clusterunique.ID
+
+	if isReadOnlyPortal && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
+		if !prepared.portalMeta.HaveAddedActiveQuery {
+			prepared.portalMeta.QueryID = ex.generateID()
+		}
+		queryID = prepared.portalMeta.QueryID
+	} else {
+		queryID = ex.generateID()
+	}
+
 	// Update the deadline on the transaction based on the collections.
 	err := ex.extraTxnState.descCollection.MaybeUpdateDeadline(ctx, ex.state.mu.txn)
 	if err != nil {
@@ -287,23 +322,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt = makeStatement(parserStmt, queryID)
 	}
 
-	var isReadOnlyPortal bool
-	if prepared != nil && prepared.portalMeta != nil && tree.IsReadOnly(prepared.AST) {
-		isReadOnlyPortal = true
-	}
-	ex.incrementStartedStmtCounter(ast)
-	defer func() {
-		if retErr == nil && !payloadHasError(retPayload) {
-			ex.incrementExecutedStmtCounter(ast)
-		}
-	}()
-
-	func(st *txnState) {
-		st.mu.Lock()
-		defer st.mu.Unlock()
-		st.mu.stmtCount++
-	}(&ex.state)
-
 	var queryTimeoutTicker *time.Timer
 	var txnTimeoutTicker *time.Timer
 	queryTimedOut := false
@@ -316,7 +334,33 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
-	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
+
+	incrementExecutedStmtCntFunc := func() {}
+	addActiveQuery := func() {
+		ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
+		ex.incrementStartedStmtCounter(ast)
+		incrementExecutedStmtCntFunc = func() {
+			if retErr == nil && !payloadHasError(retPayload) {
+				ex.incrementExecutedStmtCounter(ast)
+			}
+		}
+
+		func(st *txnState) {
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			st.mu.stmtCount++
+		}(&ex.state)
+	}
+	if !(isReadOnlyPortal && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)) {
+		addActiveQuery()
+	} else {
+		if !prepared.portalMeta.HaveAddedActiveQuery {
+			addActiveQuery()
+			prepared.portalMeta.HaveAddedActiveQuery = true
+		}
+	}
+
+	defer incrementExecutedStmtCntFunc()
 
 	if true {
 		// Make sure that we always unregister the query. It also deals with
@@ -361,6 +405,17 @@ func (ex *connExecutor) execStmtInOpenState(
 				if ex.executorType != executorTypeInternal {
 					ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 				}
+			} else {
+				cleanupFuncs = append(cleanupFuncs, NamedFunc{
+					FName: "cancel query",
+					F: func() {
+						ex.removeActiveQuery(queryID, ast)
+						cancelQuery()
+						if ex.executorType != executorTypeInternal {
+							ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+						}
+					},
+				})
 			}
 
 			// If the query timed out, we intercept the error, payload, and event here
@@ -1152,6 +1207,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	// Prepare the plan. Note, the error is processed below. Everything
 	// between here and there needs to happen even if there's an error.
+
 	err := ex.makeExecPlan(ctx, planner)
 	// We'll be closing the plan manually below after execution; this
 	// defer is a catch-all in case some other return path is taken.

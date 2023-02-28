@@ -1573,6 +1573,36 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	dsp.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, nil, /* finishedSetupFn */
 	)
+
+	checkFlowForPortal := func(portalName string) error {
+		if planner.extendedEvalCtx.portalWithFlow == nil {
+			return errors.Newf("flow for portal %s cannot be found", portalName)
+		}
+		if _, ok := planner.extendedEvalCtx.portalWithFlow[portalName]; !ok {
+			return errors.Newf("flow for portal %s cannot be found", portalName)
+		}
+		return nil
+	}
+
+	if m := planner.GetPortalMetaData(); m != nil {
+		if checkErr := checkFlowForPortal(m.PortalName); checkErr != nil {
+			if recv.commErr != nil {
+				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
+			} else {
+				panic(checkErr)
+			}
+		}
+		if recv.commErr != nil {
+			flowForPortal := planner.extendedEvalCtx.portalWithFlow[m.PortalName]
+			flowForPortal.Cleanup(ctx)
+		} else if !m.HaveAddedCleanupFunc {
+			m.AppendCleanupFunc([]NamedFunc{{FName: "cleanup flow", F: func() {
+				flowForPortal := planner.extendedEvalCtx.portalWithFlow[m.PortalName]
+				flowForPortal.Cleanup(ctx)
+			}}})
+		}
+	}
+
 	if recv.commErr != nil || recv.getError() != nil {
 		return recv.commErr
 	}

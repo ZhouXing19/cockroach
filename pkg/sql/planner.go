@@ -237,6 +237,14 @@ type planner struct {
 	evalCatalogBuiltins evalcatalog.Builtins
 }
 
+func (p *planner) GetPortalMetaData() *PortalMeta {
+	if p.stmt.Prepared != nil && p.stmt.Prepared.portalMeta != nil {
+		return p.stmt.Prepared.portalMeta
+	} else {
+		return nil
+	}
+}
+
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
 	evalCtx.SessionID = sessionID
 }

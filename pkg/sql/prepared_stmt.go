@@ -12,6 +12,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"time"
 	"unsafe"
 
@@ -39,8 +40,22 @@ const (
 	PreparedStatementOriginSessionMigration
 )
 
+type NamedFunc struct {
+	FName string
+	F     func()
+}
+
 type PortalMeta struct {
-	PortalName string
+	PortalName           string
+	HaveAddedActiveQuery bool
+	HaveAddedCleanupFunc bool
+	// Make sure it's passed by reference.
+	CleanupFuncHooks [][]NamedFunc
+	QueryID          clusterunique.ID
+}
+
+func (pm *PortalMeta) AppendCleanupFunc(fs []NamedFunc) {
+	pm.CleanupFuncHooks = append(pm.CleanupFuncHooks, fs)
 }
 
 // PreparedStatement is a SQL statement that has been parsed and the types
@@ -136,28 +151,8 @@ type PreparedPortal struct {
 	// exhausted tracks whether this portal has already been fully exhausted,
 	// meaning that any additional attempts to execute it should return no
 	// rows.
-	exhausted        bool
-	sqlStmt          *Statement
-	CleanupFuncHooks [][]func()
-}
-
-func (p *PreparedPortal) AddCleanupFuncs(f []func()) {
-	p.CleanupFuncHooks = append(p.CleanupFuncHooks, f)
-}
-
-func (p *PreparedPortal) RunLastCleanupFuncs() {
-	fs := p.CleanupFuncHooks[len(p.CleanupFuncHooks)-1]
-	for i := len(fs) - 1; i >= 0; i-- {
-		fs[i]()
-	}
-	p.CleanupFuncHooks = p.CleanupFuncHooks[:len(p.CleanupFuncHooks)-1]
-
-}
-
-func (p *PreparedPortal) RunAllCleanUpFuncs() {
-	for len(p.CleanupFuncHooks) > 0 {
-		p.RunLastCleanupFuncs()
-	}
+	exhausted bool
+	sqlStmt   *Statement
 }
 
 // makePreparedPortal creates a new PreparedPortal.
