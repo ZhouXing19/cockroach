@@ -1584,7 +1584,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		return nil
 	}
 
-	if m := planner.GetPortalMetaData(); m != nil {
+	if m := planner.GetPortalMetaData(); m != nil && enableMultipleActivePortals.Get(&evalCtx.Settings.SV) {
 		if checkErr := checkFlowForPortal(m.PortalName); checkErr != nil {
 			if recv.commErr != nil {
 				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)

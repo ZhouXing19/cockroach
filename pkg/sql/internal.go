@@ -12,7 +12,9 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -942,12 +944,15 @@ func (ie *InternalExecutor) execInternal(
 			return nil, err
 		}
 
-		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: datums}); err != nil {
+		randNum := rand.Intn(100)
+		portalName := fmt.Sprintf("internal-%d-%s", randNum, opName)
+		if err := stmtBuf.Push(ctx, BindStmt{PortalName: portalName, internalArgs: datums}); err != nil {
 			return nil, err
 		}
 
 		if err := stmtBuf.Push(ctx,
 			ExecPortal{
+				Name:         portalName,
 				TimeReceived: timeReceived,
 				// Next command will be a sync, so this can be considered as another single
 				// statement transaction.

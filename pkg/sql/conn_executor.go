@@ -1648,6 +1648,25 @@ func (ns prepStmtNamespace) HasPortal(s string) bool {
 	return ok
 }
 
+func (ns prepStmtNamespace) CleanupPortal(name string) {
+	p, ok := ns.portals[name]
+	if !ok {
+		panic(fmt.Sprintf("cannot found portal %q", name))
+	}
+	cleanupFuncStack := p.Stmt.portalMeta.CleanupFuncHooks
+	for _, fs := range cleanupFuncStack {
+		for _, nf := range fs {
+			nf.F()
+		}
+	}
+}
+
+func (ns prepStmtNamespace) CleanupAllPortals() {
+	for name := range ns.portals {
+		ns.CleanupPortal(name)
+	}
+}
+
 // MigratablePreparedStatements returns a mapping of all prepared statements.
 func (ns prepStmtNamespace) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
 	ret := make([]sessiondatapb.MigratableSession_PreparedStatement, 0, len(ns.prepStmts))

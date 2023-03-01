@@ -230,10 +230,15 @@ func (ex *connExecutor) execPortal(
 		// still don't want to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		if p, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-			if !p.Stmt.portalMeta.HaveAddedCleanupFunc {
-				p.Stmt.portalMeta.AppendCleanupFunc([]NamedFunc{{FName: "exhaust portal", F: func() { ex.exhaustPortal(portalName) }}})
-				p.Stmt.portalMeta.HaveAddedCleanupFunc = true
+		enabled := enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)
+		if err != nil || !enabled {
+			ex.exhaustPortal(portalName)
+		} else {
+			if enabled {
+				if !portal.Stmt.portalMeta.HaveAddedCleanupFunc {
+					portal.Stmt.portalMeta.AppendCleanupFunc([]NamedFunc{{FName: "exhaust portal", F: func() { ex.exhaustPortal(portalName) }}})
+					portal.Stmt.portalMeta.HaveAddedCleanupFunc = true
+				}
 			}
 		}
 		return ev, payload, err
@@ -273,11 +278,12 @@ func (ex *connExecutor) execStmtInOpenState(
 				f.F()
 			}
 		} else {
-			if prepared != nil && prepared.portalMeta != nil && prepared.portalMeta.CleanupFuncHooks != nil && !prepared.portalMeta.HaveAddedCleanupFunc {
+			if prepared != nil && prepared.portalMeta != nil && prepared.portalMeta.CleanupFuncHooks != nil && !prepared.portalMeta.HaveAddedCleanupFunc && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
 				prepared.portalMeta.AppendCleanupFunc(cleanupFuncs)
 			}
 		}
 	}()
+	// TODO(janexing): sp should be setup only once and finished only once.
 	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql query")
 	// TODO(andrei): Consider adding the placeholders as tags too.
 	sp.SetTag("statement", attribute.StringValue(parserStmt.SQL))
@@ -538,6 +544,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	var needFinish bool
+	// TODO(janexing): ih should be setup only once and finished only once.
 	ctx, needFinish = ih.Setup(
 		ctx, ex.server.cfg, ex.statsCollector, p, ex.stmtDiagnosticsRecorder,
 		stmt.StmtNoConstants, os.ImplicitTxn.Get(), ex.extraTxnState.shouldCollectTxnExecutionStats,
@@ -1065,6 +1072,10 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 
 	if err := ex.extraTxnState.sqlCursors.closeAll(true /* errorOnWithHold */); err != nil {
 		return err
+	}
+
+	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
+		ex.extraTxnState.prepStmtsNamespace.CleanupAllPortals()
 	}
 
 	// We need to step the transaction before committing if it has stepping
