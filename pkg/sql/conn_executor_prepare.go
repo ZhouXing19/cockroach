@@ -507,7 +507,7 @@ func (ex *connExecutor) addPortal(
 		return err
 	}
 
-	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = portal
+	ex.extraTxnState.prepStmtsNamespace.portals[portalName] = &portal
 	return nil
 }
 

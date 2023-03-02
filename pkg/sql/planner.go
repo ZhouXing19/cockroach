@@ -178,6 +178,9 @@ type planner struct {
 	// Corresponding Statement for this query.
 	stmt Statement
 
+	// portalInfo is set when the query is from a portal.
+	portalInfo *PreparedPortal
+
 	instrumentation instrumentationHelper
 
 	// Contexts for different stages of planning and execution.
@@ -237,12 +240,16 @@ type planner struct {
 	evalCatalogBuiltins evalcatalog.Builtins
 }
 
-func (p *planner) GetPortalMetaData() *PortalMeta {
-	if p.stmt.Prepared != nil && p.stmt.Prepared.portalMeta != nil {
-		return p.stmt.Prepared.portalMeta
+func (p *planner) GetPortalMetaData() *portalMeta {
+	if p.portalInfo != nil && p.portalInfo.meta != nil {
+		return p.portalInfo.meta
 	} else {
 		return nil
 	}
+}
+
+func (p *planner) GetPortalInfo() *PreparedPortal {
+	return p.portalInfo
 }
 
 func (evalCtx *extendedEvalContext) setSessionID(sessionID clusterunique.ID) {
@@ -833,6 +840,7 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
+	p.portalInfo = nil
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.

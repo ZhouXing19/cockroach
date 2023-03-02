@@ -882,10 +882,17 @@ func (p *PlanningCtx) IsLocal() bool {
 }
 
 func (p *PlanningCtx) GetPortalName() (string, bool) {
-	if p.planner != nil && p.planner.stmt.Prepared != nil && p.planner.stmt.Prepared.portalMeta != nil {
-		return p.planner.stmt.Prepared.portalMeta.PortalName, true
+	if p.planner != nil && p.planner.portalInfo != nil && p.planner.portalInfo.meta != nil {
+		return p.planner.portalInfo.Name, true
 	}
 	return "", false
+}
+
+func (p *PlanningCtx) GetPortalMeta() *portalMeta {
+	if p.planner != nil && p.planner.portalInfo != nil && p.planner.portalInfo.meta != nil {
+		return p.planner.portalInfo.meta
+	}
+	return nil
 }
 
 // getDefaultSaveFlowsFunc returns the default function used to save physical

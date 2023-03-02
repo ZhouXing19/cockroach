@@ -86,14 +86,7 @@ import (
 // pinfo: The values to use for the statement's placeholders. If nil is passed,
 //
 //	then the statement cannot have any placeholder.
-func (ex *connExecutor) execStmt(
-	ctx context.Context,
-	parserStmt parser.Statement,
-	prepared *PreparedStatement,
-	pinfo *tree.PlaceholderInfo,
-	res RestrictedCommandResult,
-	canAutoCommit bool,
-) (fsm.Event, fsm.EventPayload, error) {
+func (ex *connExecutor) execStmt(ctx context.Context, parserStmt parser.Statement, portal *PreparedPortal, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult, canAutoCommit bool) (fsm.Event, fsm.EventPayload, error) {
 	ast := parserStmt.AST
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
 		log.HasSpanOrEvent(ctx) {
@@ -127,8 +120,8 @@ func (ex *connExecutor) execStmt(
 		ev, payload = ex.execStmtInNoTxnState(ctx, ast, res)
 
 	case stateOpen:
-		err = ex.execWithProfiling(ctx, ast, prepared, func(ctx context.Context) error {
-			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, prepared, pinfo, res, canAutoCommit)
+		err = ex.execWithProfiling(ctx, ast, portal, func(ctx context.Context) error {
+			ev, payload, err = ex.execStmtInOpenState(ctx, parserStmt, portal, pinfo, res, canAutoCommit)
 			return err
 		})
 		switch ev.(type) {
@@ -190,7 +183,7 @@ func (ex *connExecutor) recordFailure() {
 // method that is performing additional work to track portal's state.
 func (ex *connExecutor) execPortal(
 	ctx context.Context,
-	portal PreparedPortal,
+	portal *PreparedPortal,
 	portalName string,
 	stmtRes CommandResult,
 	pinfo *tree.PlaceholderInfo,
@@ -217,10 +210,12 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
-		if portal.Stmt.portalMeta == nil {
-			portal.Stmt.portalMeta = &PortalMeta{PortalName: portalName, CleanupFuncHooks: make([][]NamedFunc, 0)}
+		enabled := enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) && tree.IsReadOnly(portal.Stmt.AST)
+		if enabled && portal.meta == nil {
+			portal.Name = portalName
+			portal.meta = &portalMeta{CleanupFuncHooks: make([][]NamedFunc, 0), flow: nil}
 		}
-		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
+		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, portal, pinfo, stmtRes, canAutoCommit)
 		// Portal suspension is supported via a "side" state machine
 		// (see pgwire.limitedCommandResult for details), so when
 		// execStmt returns, we know for sure that the portal has been
@@ -230,21 +225,20 @@ func (ex *connExecutor) execPortal(
 		// still don't want to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
 		// so only exhaust it if it still exists.
-		enabled := enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)
 		if err != nil || !enabled {
 			ex.exhaustPortal(portalName)
 		} else {
 			if enabled {
-				if !portal.Stmt.portalMeta.HaveAddedCleanupFunc {
-					portal.Stmt.portalMeta.AppendCleanupFunc([]NamedFunc{{FName: "exhaust portal", F: func() { ex.exhaustPortal(portalName) }}})
-					portal.Stmt.portalMeta.HaveAddedCleanupFunc = true
+				if !portal.meta.HaveAddedCleanupFunc {
+					portal.meta.AppendCleanupFunc([]NamedFunc{{FName: "exhaust portal", F: func() { ex.exhaustPortal(portalName) }}})
+					portal.meta.HaveAddedCleanupFunc = true
 				}
 			}
 		}
 		return ev, payload, err
 
 	default:
-		return ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
+		return ex.execStmt(ctx, portal.Stmt.Statement, portal, pinfo, stmtRes, canAutoCommit)
 	}
 }
 
@@ -261,14 +255,7 @@ func (ex *connExecutor) execPortal(
 // the returned Event.
 //
 // The returned event can be nil if no state transition is required.
-func (ex *connExecutor) execStmtInOpenState(
-	ctx context.Context,
-	parserStmt parser.Statement,
-	prepared *PreparedStatement,
-	pinfo *tree.PlaceholderInfo,
-	res RestrictedCommandResult,
-	canAutoCommit bool,
-) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+func (ex *connExecutor) execStmtInOpenState(ctx context.Context, parserStmt parser.Statement, portal *PreparedPortal, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult, canAutoCommit bool) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	var hadError bool
 	cleanupFuncs := make([]NamedFunc, 0)
 
@@ -278,8 +265,8 @@ func (ex *connExecutor) execStmtInOpenState(
 				f.F()
 			}
 		} else {
-			if prepared != nil && prepared.portalMeta != nil && prepared.portalMeta.CleanupFuncHooks != nil && !prepared.portalMeta.HaveAddedCleanupFunc && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-				prepared.portalMeta.AppendCleanupFunc(cleanupFuncs)
+			if portal != nil && portal.meta != nil && !portal.meta.HaveAddedCleanupFunc {
+				portal.meta.AppendCleanupFunc(cleanupFuncs)
 			}
 		}
 	}()
@@ -296,20 +283,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		hadError = true
 		return ev, payload, nil
 	}
-
-	var isReadOnlyPortal bool
-	if prepared != nil && prepared.portalMeta != nil && tree.IsReadOnly(prepared.AST) {
-		isReadOnlyPortal = true
-	}
-
 	var stmt Statement
 	var queryID clusterunique.ID
 
-	if isReadOnlyPortal && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-		if !prepared.portalMeta.HaveAddedActiveQuery {
-			prepared.portalMeta.QueryID = ex.generateID()
+	if portal != nil && portal.meta != nil {
+		if !portal.meta.HaveAddedActiveQuery {
+			portal.meta.QueryID = ex.generateID()
 		}
-		queryID = prepared.portalMeta.QueryID
+		queryID = portal.meta.QueryID
 	} else {
 		queryID = ex.generateID()
 	}
@@ -321,9 +302,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	os := ex.machine.CurState().(stateOpen)
 
-	isExtendedProtocol := prepared != nil
+	isExtendedProtocol := portal != nil
 	if isExtendedProtocol {
-		stmt = makeStatementFromPrepared(prepared, queryID)
+		stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
 		stmt = makeStatement(parserStmt, queryID)
 	}
@@ -357,100 +338,98 @@ func (ex *connExecutor) execStmtInOpenState(
 			st.mu.stmtCount++
 		}(&ex.state)
 	}
-	if !(isReadOnlyPortal && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)) {
+	if portal == nil || portal.meta == nil {
 		addActiveQuery()
 	} else {
-		if !prepared.portalMeta.HaveAddedActiveQuery {
+		if !portal.meta.HaveAddedActiveQuery {
 			addActiveQuery()
-			prepared.portalMeta.HaveAddedActiveQuery = true
+			portal.meta.HaveAddedActiveQuery = true
 		}
 	}
 
 	defer incrementExecutedStmtCntFunc()
 
-	if true {
-		// Make sure that we always unregister the query. It also deals with
-		// overwriting res.Error to a more user-friendly message in case of query
-		// cancellation.
-		defer func(ctx context.Context, res RestrictedCommandResult) {
-			if queryTimeoutTicker != nil {
-				if !queryTimeoutTicker.Stop() {
-					// Wait for the timer callback to complete to avoid a data race on
-					// queryTimedOut.
-					<-queryDoneAfterFunc
-				}
+	// Make sure that we always unregister the query. It also deals with
+	// overwriting res.Error to a more user-friendly message in case of query
+	// cancellation.
+	defer func(ctx context.Context, res RestrictedCommandResult) {
+		if queryTimeoutTicker != nil {
+			if !queryTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// queryTimedOut.
+				<-queryDoneAfterFunc
 			}
-			if txnTimeoutTicker != nil {
-				if !txnTimeoutTicker.Stop() {
-					// Wait for the timer callback to complete to avoid a data race on
-					// txnTimedOut.
-					<-txnDoneAfterFunc
-				}
+		}
+		if txnTimeoutTicker != nil {
+			if !txnTimeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// txnTimedOut.
+				<-txnDoneAfterFunc
 			}
+		}
 
-			// Detect context cancelation and overwrite whatever error might have been
-			// set on the result before. The idea is that once the query's context is
-			// canceled, all sorts of actors can detect the cancelation and set all
-			// sorts of errors on the result. Rather than trying to impose discipline
-			// in that jungle, we just overwrite them all here with an error that's
-			// nicer to look at for the client.
-			if res != nil && ctx.Err() != nil && res.Err() != nil {
-				// Even in the cases where the error is a retryable error, we want to
-				// intercept the event and payload returned here to ensure that the query
-				// is not retried.
-				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(ast)),
-				}
-				res.SetError(cancelchecker.QueryCanceledError)
-				retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+		// Detect context cancelation and overwrite whatever error might have been
+		// set on the result before. The idea is that once the query's context is
+		// canceled, all sorts of actors can detect the cancelation and set all
+		// sorts of errors on the result. Rather than trying to impose discipline
+		// in that jungle, we just overwrite them all here with an error that's
+		// nicer to look at for the client.
+		if res != nil && ctx.Err() != nil && res.Err() != nil {
+			// Even in the cases where the error is a retryable error, we want to
+			// intercept the event and payload returned here to ensure that the query
+			// is not retried.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
+			res.SetError(cancelchecker.QueryCanceledError)
+			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+		}
 
-			if !(isReadOnlyPortal && enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV)) {
-				ex.removeActiveQuery(queryID, ast)
-				cancelQuery()
-				if ex.executorType != executorTypeInternal {
-					ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-				}
-			} else {
-				cleanupFuncs = append(cleanupFuncs, NamedFunc{
-					FName: "cancel query",
-					F: func() {
-						ex.removeActiveQuery(queryID, ast)
-						cancelQuery()
-						if ex.executorType != executorTypeInternal {
-							ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-						}
-					},
-				})
+		if !(portal != nil && portal.meta != nil) {
+			ex.removeActiveQuery(queryID, ast)
+			cancelQuery()
+			if ex.executorType != executorTypeInternal {
+				ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 			}
+		} else {
+			cleanupFuncs = append(cleanupFuncs, NamedFunc{
+				FName: "cancel query",
+				F: func() {
+					ex.removeActiveQuery(queryID, ast)
+					cancelQuery()
+					if ex.executorType != executorTypeInternal {
+						ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+					}
+				},
+			})
+		}
 
-			// If the query timed out, we intercept the error, payload, and event here
-			// for the same reasons we intercept them for canceled queries above.
-			// Overriding queries with a QueryTimedOut error needs to happen after
-			// we've checked for canceled queries as some queries may be canceled
-			// because of a timeout, in which case the appropriate error to return to
-			// the client is one that indicates the timeout, rather than the more general
-			// query canceled error. It's important to note that a timed out query may
-			// not have been canceled (eg. We never even start executing a query
-			// because the timeout has already expired), and therefore this check needs
-			// to happen outside the canceled query check above.
-			if queryTimedOut {
-				// A timed out query should never produce retryable errors/events/payloads
-				// so we intercept and overwrite them all here.
-				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(ast)),
-				}
-				res.SetError(sqlerrors.QueryTimeoutError)
-				retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
-			} else if txnTimedOut {
-				retEv = eventNonRetriableErr{
-					IsCommit: fsm.FromBool(isCommit(ast)),
-				}
-				res.SetError(sqlerrors.TxnTimeoutError)
-				retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
+		// If the query timed out, we intercept the error, payload, and event here
+		// for the same reasons we intercept them for canceled queries above.
+		// Overriding queries with a QueryTimedOut error needs to happen after
+		// we've checked for canceled queries as some queries may be canceled
+		// because of a timeout, in which case the appropriate error to return to
+		// the client is one that indicates the timeout, rather than the more general
+		// query canceled error. It's important to note that a timed out query may
+		// not have been canceled (eg. We never even start executing a query
+		// because the timeout has already expired), and therefore this check needs
+		// to happen outside the canceled query check above.
+		if queryTimedOut {
+			// A timed out query should never produce retryable errors/events/payloads
+			// so we intercept and overwrite them all here.
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
 			}
-		}(ctx, res)
-	}
+			res.SetError(sqlerrors.QueryTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.QueryTimeoutError}
+		} else if txnTimedOut {
+			retEv = eventNonRetriableErr{
+				IsCommit: fsm.FromBool(isCommit(ast)),
+			}
+			res.SetError(sqlerrors.TxnTimeoutError)
+			retPayload = eventNonRetriableErrPayload{err: sqlerrors.TxnTimeoutError}
+		}
+	}(ctx, res)
 
 	if ex.executorType != executorTypeInternal {
 		ex.metrics.EngineMetrics.SQLActiveStatements.Inc(1)
@@ -459,6 +438,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
+	// TODO(janexing): do we need to reset when it's reusing the portal?
+	// I think so, as here the planner is 1-1 to the portal execution
 	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	p.sessionDataMutatorIterator.paramStatusUpdater = res
 	p.noticeSender = res
@@ -788,6 +769,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = stmt
+	if portal != nil {
+		p.portalInfo = portal
+	}
 	p.cancelChecker.Reset(ctx)
 
 	// Auto-commit is disallowed during statement execution if we previously
@@ -1074,9 +1058,7 @@ func (ex *connExecutor) commitSQLTransactionInternal(ctx context.Context) error 
 		return err
 	}
 
-	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-		ex.extraTxnState.prepStmtsNamespace.CleanupAllPortals()
-	}
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
 
 	// We need to step the transaction before committing if it has stepping
 	// enabled. If it doesn't have stepping enabled, then we just set the
@@ -1166,6 +1148,9 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	if err := ex.extraTxnState.sqlCursors.closeAll(false /* errorOnWithHold */); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
+
+	ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
@@ -2587,12 +2572,7 @@ func logTraceAboveThreshold(
 	log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s", opName, elapsed, threshold, dump)
 }
 
-func (ex *connExecutor) execWithProfiling(
-	ctx context.Context,
-	ast tree.Statement,
-	prepared *PreparedStatement,
-	op func(context.Context) error,
-) error {
+func (ex *connExecutor) execWithProfiling(ctx context.Context, ast tree.Statement, prepared *PreparedPortal, op func(context.Context) error) error {
 	var err error
 	if ex.server.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		remoteAddr := "internal"
@@ -2601,7 +2581,7 @@ func (ex *connExecutor) execWithProfiling(
 		}
 		var stmtNoConstants string
 		if prepared != nil {
-			stmtNoConstants = prepared.StatementNoConstants
+			stmtNoConstants = prepared.Stmt.StatementNoConstants
 		} else {
 			stmtNoConstants = formatStatementHideConstants(ast)
 		}

@@ -830,29 +830,33 @@ func (dsp *DistSQLPlanner) Run(
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
 
-	portalName, isForPortal := planCtx.GetPortalName()
-
 	var flow flowinfra.Flow
 	var err error
-	if savedFlow, ok := evalCtx.portalWithFlow[portalName]; ok {
-		savedFlow.SetNewRowSyncFlowConsumer(recv)
-		flow = savedFlow
+	// TODO(janexing): should be planCtx.planner.portalInfo.flow
+	if m := planCtx.GetPortalMeta(); m != nil {
+		if savedFlow := m.flow; savedFlow != nil {
+			savedFlow.SetNewRowSyncFlowConsumer(recv)
+			flow = savedFlow
+		} else {
+			ctx, flow, err = dsp.setupFlows(
+				ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
+			)
+			flow.SetToReuse()
+			if err != nil {
+				recv.SetError(err)
+				return
+			}
+			m.flow = flow
+		}
 	} else {
 		ctx, flow, err = dsp.setupFlows(
 			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 		)
-		flow.SetToReuse()
-		if err != nil {
-			recv.SetError(err)
-			return
-		}
-		if isForPortal {
-			evalCtx.portalWithFlow[portalName] = flow
-		}
 	}
+
 	if flow != nil {
 		// Make sure that the local flow is always cleaned up if it was created.
-		if !(isForPortal && enableMultipleActivePortals.Get(&dsp.st.SV)) {
+		if planCtx.GetPortalMeta() == nil {
 			defer func() {
 				flow.Cleanup(ctx)
 			}()
@@ -1570,22 +1574,21 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 		}
 	}
 	recv.discardRows = planner.instrumentation.ShouldDiscardRows()
+	// The flow should have been saved to planCtx.
 	dsp.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv, nil, /* finishedSetupFn */
 	)
 
-	checkFlowForPortal := func(portalName string) error {
-		if planner.extendedEvalCtx.portalWithFlow == nil {
-			return errors.Newf("flow for portal %s cannot be found", portalName)
-		}
-		if _, ok := planner.extendedEvalCtx.portalWithFlow[portalName]; !ok {
-			return errors.Newf("flow for portal %s cannot be found", portalName)
+	checkFlowForPortal := func() error {
+		if planner.portalInfo.meta.flow == nil {
+			return errors.Newf("flow for portal %s cannot be found", planner.portalInfo.Name)
 		}
 		return nil
 	}
 
-	if m := planner.GetPortalMetaData(); m != nil && enableMultipleActivePortals.Get(&evalCtx.Settings.SV) {
-		if checkErr := checkFlowForPortal(m.PortalName); checkErr != nil {
+	if p := planner.portalInfo; p != nil && p.meta != nil {
+		// TODO(janexing): this is dirty
+		if checkErr := checkFlowForPortal(); checkErr != nil {
 			if recv.commErr != nil {
 				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
 			} else {
@@ -1593,12 +1596,12 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			}
 		}
 		if recv.commErr != nil {
-			flowForPortal := planner.extendedEvalCtx.portalWithFlow[m.PortalName]
-			flowForPortal.Cleanup(ctx)
-		} else if !m.HaveAddedCleanupFunc {
-			m.AppendCleanupFunc([]NamedFunc{{FName: "cleanup flow", F: func() {
-				flowForPortal := planner.extendedEvalCtx.portalWithFlow[m.PortalName]
-				flowForPortal.Cleanup(ctx)
+			p.meta.flow.Cleanup(ctx)
+		} else if !p.meta.HaveAddedCleanupFunc {
+			flow := planner.portalInfo.meta.flow
+			p.meta.AppendCleanupFunc([]NamedFunc{{FName: "cleanup flow", F: func() {
+				flow.GetFlowCtx().Mon.RelinquishAllOnReleaseBytes()
+				flow.Cleanup(ctx)
 			}}})
 		}
 	}

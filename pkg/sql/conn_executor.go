@@ -1037,11 +1037,11 @@ func (s *Server) newConnExecutor(
 
 	ex.extraTxnState.prepStmtsNamespace = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		portals:   make(map[string]*PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos = prepStmtNamespace{
 		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]PreparedPortal),
+		portals:   make(map[string]*PreparedPortal),
 	}
 	ex.extraTxnState.prepStmtsNamespaceMemAcc = ex.sessionMon.MakeBoundAccount()
 	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sdMutIterator.sds)
@@ -1126,6 +1126,8 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		txnEvType = txnRollback
 	}
 
+	// ex.extraTxnState.prepStmtsNamespace.closeAllPortals(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc)
+
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
@@ -1152,6 +1154,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 			panic(errors.AssertionFailedf("txn span not closed in state %s", ex.machine.CurState()))
 		}
 	} else if closeType == externalTxnClose {
+		// Close all portals.
+		for name, p := range ex.extraTxnState.prepStmtsNamespace.portals {
+			p.close(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
+			delete(ex.extraTxnState.prepStmtsNamespace.portals, name)
+		}
 		ex.state.finishExternalTxn()
 	}
 
@@ -1634,7 +1641,7 @@ type prepStmtNamespace struct {
 	// portals contains the portals currently available on the session. Note
 	// that PreparedPortal.accountForCopy needs to be called if a copy of a
 	// PreparedPortal is retained.
-	portals map[string]PreparedPortal
+	portals map[string]*PreparedPortal
 }
 
 // HasActivePortals returns true if there are portals in the session.
@@ -1653,17 +1660,28 @@ func (ns prepStmtNamespace) CleanupPortal(name string) {
 	if !ok {
 		panic(fmt.Sprintf("cannot found portal %q", name))
 	}
-	cleanupFuncStack := p.Stmt.portalMeta.CleanupFuncHooks
-	for _, fs := range cleanupFuncStack {
-		for _, nf := range fs {
-			nf.F()
+	if p.meta != nil {
+		cleanupFuncStack := p.meta.CleanupFuncHooks
+		for _, fs := range cleanupFuncStack {
+			for _, nf := range fs {
+				nf.F()
+			}
 		}
+		p.meta = nil
 	}
+	// delete(ns.portals, name)
 }
 
 func (ns prepStmtNamespace) CleanupAllPortals() {
 	for name := range ns.portals {
 		ns.CleanupPortal(name)
+	}
+}
+
+func (ns prepStmtNamespace) closeAllPortals(ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount) {
+	for name, p := range ns.portals {
+		p.close(ctx, prepStmtsNamespaceMemAcc, name)
+		delete(ns.portals, name)
 	}
 }
 

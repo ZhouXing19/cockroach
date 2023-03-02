@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"time"
 	"unsafe"
 
@@ -39,24 +40,6 @@ const (
 	// statement came from a call to crdb_internal.deserialize_session.
 	PreparedStatementOriginSessionMigration
 )
-
-type NamedFunc struct {
-	FName string
-	F     func()
-}
-
-type PortalMeta struct {
-	PortalName           string
-	HaveAddedActiveQuery bool
-	HaveAddedCleanupFunc bool
-	// Make sure it's passed by reference.
-	CleanupFuncHooks [][]NamedFunc
-	QueryID          clusterunique.ID
-}
-
-func (pm *PortalMeta) AppendCleanupFunc(fs []NamedFunc) {
-	pm.CleanupFuncHooks = append(pm.CleanupFuncHooks, fs)
-}
 
 // PreparedStatement is a SQL statement that has been parsed and the types
 // of arguments and results have been determined.
@@ -87,8 +70,6 @@ type PreparedStatement struct {
 	// origin is the protocol in which this prepare statement was created.
 	// Used for reporting on `pg_prepared_statements`.
 	origin PreparedStatementOrigin
-
-	portalMeta *PortalMeta
 }
 
 // MemoryEstimate returns a rough estimate of the PreparedStatement's memory
@@ -142,6 +123,7 @@ type preparedStatementsAccessor interface {
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
+	Name  string
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
 
@@ -153,6 +135,27 @@ type PreparedPortal struct {
 	// rows.
 	exhausted bool
 	sqlStmt   *Statement
+
+	meta *portalMeta
+}
+
+type NamedFunc struct {
+	FName string
+	F     func()
+}
+
+type portalMeta struct {
+	flow flowinfra.Flow
+	// TODO(janexing): deprecate these 2 booleans
+	HaveAddedActiveQuery bool
+	HaveAddedCleanupFunc bool
+	// Make sure it's passed by reference.
+	CleanupFuncHooks [][]NamedFunc
+	QueryID          clusterunique.ID
+}
+
+func (pm *portalMeta) AppendCleanupFunc(fs []NamedFunc) {
+	pm.CleanupFuncHooks = append(pm.CleanupFuncHooks, fs)
 }
 
 // makePreparedPortal creates a new PreparedPortal.
@@ -175,7 +178,7 @@ func (ex *connExecutor) makePreparedPortal(
 
 // accountForCopy updates the state to account for the copy of the
 // PreparedPortal (p is the copy).
-func (p PreparedPortal) accountForCopy(
+func (p *PreparedPortal) accountForCopy(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) error {
 	if err := prepStmtsNamespaceMemAcc.Grow(ctx, p.size(portalName)); err != nil {
@@ -187,13 +190,23 @@ func (p PreparedPortal) accountForCopy(
 }
 
 // close closes this portal.
-func (p PreparedPortal) close(
+func (p *PreparedPortal) close(
 	ctx context.Context, prepStmtsNamespaceMemAcc *mon.BoundAccount, portalName string,
 ) {
 	prepStmtsNamespaceMemAcc.Shrink(ctx, p.size(portalName))
 	p.Stmt.decRef(ctx)
+	if p.meta != nil {
+		cleanupFuncStack := p.meta.CleanupFuncHooks
+		for _, fs := range cleanupFuncStack {
+			for _, nf := range fs {
+				nf.F()
+			}
+		}
+		p.meta = nil
+	}
+
 }
 
-func (p PreparedPortal) size(portalName string) int64 {
+func (p *PreparedPortal) size(portalName string) int64 {
 	return int64(uintptr(len(portalName)) + unsafe.Sizeof(p))
 }
