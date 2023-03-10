@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -241,6 +243,27 @@ func (ex *connExecutor) execPortal(
 	default:
 		return ex.execStmt(ctx, portal.Stmt.Statement, portal.Stmt, pinfo, stmtRes, canAutoCommit)
 	}
+}
+
+func dealWithPlpgsqlFunc(stmt *tree.CreateFunction) error {
+	// assert that the language is PLPGSQL
+	var funcBodyStr string
+	for _, option := range stmt.Options {
+		switch opt := option.(type) {
+		case tree.FunctionBodyStr:
+			funcBodyStr = string(opt)
+		}
+	}
+	plpgStmtCounter, err := plpgsql.ParseAndGetCounter(funcBodyStr)
+	if err != nil {
+		return pgerror.Wrap(err, pgcode.Syntax, "plpgsql parser cannot parse")
+	}
+	for stmtTag, cnt := range plpgStmtCounter {
+		for i := 0; i < cnt; i++ {
+			telemetry.Inc(sqltelemetry.PlpgsqlStmtCounter(stmtTag))
+		}
+	}
+	return unimplemented.New("plpgsql", "plpgsql not supported for udf")
 }
 
 // execStmtInOpenState executes one statement in the context of the session's
@@ -655,6 +678,16 @@ func (ex *connExecutor) execStmtInOpenState(
 			return makeErrEvent(err)
 		}
 		return nil, nil, nil
+
+	case *tree.CreateFunction:
+		for _, option := range s.Options {
+			switch opt := option.(type) {
+			case tree.FunctionLanguage:
+				if opt == tree.FunctionLangPlPgSQL {
+					return makeErrEvent(dealWithPlpgsqlFunc(s))
+				}
+			}
+		}
 	}
 
 	p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)

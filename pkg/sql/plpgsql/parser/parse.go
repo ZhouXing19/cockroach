@@ -11,7 +11,9 @@
 package parser
 
 import (
+	"fmt"
 	"go/constant"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -208,6 +210,38 @@ func unaryNegation(e tree.Expr) tree.Expr {
 		Operator: tree.MakeUnaryOperator(tree.UnaryMinus),
 		Expr:     e,
 	}
+}
+
+type PlpgSQLStmtCounter map[string]int
+
+func (p *PlpgSQLStmtCounter) String() string {
+	var buf strings.Builder
+	for k, v := range *p {
+		buf.WriteString(fmt.Sprintf("%s: %d\n", k, v))
+	}
+	return buf.String()
+}
+
+func ParseAndGetCounter(sql string) (PlpgSQLStmtCounter, error) {
+	stmtCnt := PlpgSQLStmtCounter{}
+	stmt, err := Parse(sql)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range stmt.AST.Body {
+		taggedStmt, ok := s.(plpgsqltree.TagedPLpgSQLStatement)
+		if !ok {
+			panic(fmt.Sprintf("no tag found for stmt %q", s))
+		}
+		tag := taggedStmt.PlpgSQLStatementTag()
+		_, ok = stmtCnt[tag]
+		if !ok {
+			stmtCnt[tag] = 1
+		} else {
+			stmtCnt[tag]++
+		}
+	}
+	return stmtCnt, nil
 }
 
 // Parse parses a sql statement string and returns a list of Statements.

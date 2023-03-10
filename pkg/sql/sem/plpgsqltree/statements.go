@@ -26,6 +26,10 @@ type PLpgSQLStatement interface {
 	plpgsqlStmt()
 }
 
+type TagedPLpgSQLStatement interface {
+	PlpgSQLStatementTag() string
+}
+
 type PLpgSQLStatementImpl struct {
 	// TODO (Chengxiong) figure out how to get line number from scanner.
 	LineNo int
@@ -69,6 +73,10 @@ func (s *PLpgSQLStmtBlock) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("END\n")
 }
 
+func (s *PLpgSQLStmtBlock) PlpgSQLStatementTag() string {
+	return "stmt_block"
+}
+
 // stmt_assign
 type PLpgSQLStmtAssign struct {
 	PLpgSQLStatement
@@ -80,6 +88,10 @@ type PLpgSQLStmtAssign struct {
 
 func (s *PLpgSQLStmtAssign) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("ASSIGN %s := %s\n", s.Var, s.Value))
+}
+
+func (s *PLpgSQLStmtAssign) PlpgSQLStatementTag() string {
+	return "stmt_assign"
 }
 
 // stmt_if
@@ -111,6 +123,10 @@ func (s *PLpgSQLStmtIf) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("END IF\n")
 }
 
+func (s *PLpgSQLStmtIf) PlpgSQLStatementTag() string {
+	return "stmt_if"
+}
+
 type PLpgSQLStmtIfElseIfArm struct {
 	PLpgSQLStatementImpl
 	LineNo int
@@ -125,6 +141,10 @@ func (s *PLpgSQLStmtIfElseIfArm) Format(ctx *tree.FmtCtx) {
 		ctx.WriteString("\t")
 		stmt.Format(ctx)
 	}
+}
+
+func (s *PLpgSQLStmtIfElseIfArm) PlpgSQLStatementTag() string {
+	return "stmt_if_else_if"
 }
 
 // stmt_case
@@ -157,6 +177,10 @@ func (s *PLpgSQLStmtCase) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("END CASE\n")
 }
 
+func (s *PLpgSQLStmtCase) PlpgSQLStatementTag() string {
+	return "stmt_case"
+}
+
 type PLpgSQLStmtCaseWhenArm struct {
 	LineNo int
 	// TODO: Change to PLpgSQLExpr
@@ -182,7 +206,8 @@ type PLpgSQLStmtSimpleLoop struct {
 	Body  []PLpgSQLStatement
 }
 
-func (s *PLpgSQLStmtSimpleLoop) Format(ctx *tree.FmtCtx) {
+func (s *PLpgSQLStmtSimpleLoop) PlpgSQLStatementTag() string {
+	return "stmt_simple_loop"
 }
 
 // stmt_while
@@ -194,6 +219,10 @@ type PLpgSQLStmtWhileLoop struct {
 }
 
 func (s *PLpgSQLStmtWhileLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtWhileLoop) PlpgSQLStatementTag() string {
+	return "stmt_while"
 }
 
 // stmt_for
@@ -211,6 +240,10 @@ type PLpgSQLStmtForIntLoop struct {
 func (s *PLpgSQLStmtForIntLoop) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtForIntLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_int_loop"
+}
+
 type PLpgSQLStmtForQueryLoop struct {
 	PLpgSQLStatementImpl
 	Label string
@@ -219,6 +252,10 @@ type PLpgSQLStmtForQueryLoop struct {
 }
 
 func (s *PLpgSQLStmtForQueryLoop) Format(ctx *tree.FmtCtx) {
+}
+
+func (s *PLpgSQLStmtForQueryLoop) PlpgSQLStatementTag() string {
+	return "stmt_for_query_loop"
 }
 
 type PLpgSQLStmtForQuerySelectLoop struct {
@@ -482,9 +519,13 @@ func (s *PLpgSQLStmtOpen) Format(ctx *tree.FmtCtx) {
 			ctx.WriteString(s.Query)
 		}
 	} else {
-		ctx.WriteString(fmt.Sprintf("%s", s.ArgQuery))
+		ctx.WriteString(s.ArgQuery)
 	}
 	ctx.WriteString("\n")
+}
+
+func (s *PLpgSQLStmtOpen) PlpgSQLStatementTag() string {
+	return "stmt_open"
 }
 
 // stmt_fetch
@@ -503,6 +544,10 @@ type PLpgSQLStmtFetch struct {
 func (s *PLpgSQLStmtFetch) Format(ctx *tree.FmtCtx) {
 }
 
+func (s *PLpgSQLStmtFetch) PlpgSQLStatementTag() string {
+	return "stmt_fetch"
+}
+
 // stmt_close
 type PLpgSQLStmtClose struct {
 	PLpgSQLStatementImpl
@@ -511,6 +556,10 @@ type PLpgSQLStmtClose struct {
 
 func (s *PLpgSQLStmtClose) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CLOSE a cursor\n")
+}
+
+func (s *PLpgSQLStmtClose) PlpgSQLStatementTag() string {
+	return "stmt_close"
 }
 
 // stmt_commit
@@ -538,4 +587,8 @@ type PLpgSQLStmtNull struct {
 
 func (s *PLpgSQLStmtNull) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("NULL\n")
+}
+
+func (s *PLpgSQLStmtNull) PlpgSQLStatementTag() string {
+	return "stmt_null"
 }
