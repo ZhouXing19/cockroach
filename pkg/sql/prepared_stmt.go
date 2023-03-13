@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // PreparedStatementOrigin is an enum representing the source of where
@@ -138,7 +139,7 @@ type PreparedPortal struct {
 	// rows.
 	exhausted bool
 
-	// pauseInfo saved info needed for the "multiple active portal" mode.
+	// pauseInfo is the saved info needed for a pausable portal.
 	pauseInfo *portalPauseInfo
 }
 
@@ -215,7 +216,7 @@ func (n *cleanupFuncStack) appendFunc(f namedFunc) {
 }
 
 func (n *cleanupFuncStack) run() {
-	for i := len(n.stack) - 1; i >= 0; i-- {
+	for i := 0; i < len(n.stack); i++ {
 		n.stack[i].f()
 	}
 	*n = cleanupFuncStack{}
@@ -238,6 +239,9 @@ type instrumentationHelperWrapper struct {
 // the portal, execute any other statement, and come back to re-execute it or
 // close it.
 type portalPauseInfo struct {
+	// sp stores the tracing span of the underlying statement. It is closed when
+	// the portal finishes.
+	sp *tracing.Span
 	// outputTypes are the types of the result columns produced by the physical plan.
 	// We need this as when re-executing the portal, we are reusing the flow
 	// with the new receiver, but not re-generating the physical plan.
@@ -252,16 +256,10 @@ type portalPauseInfo struct {
 	// ihWrapper stores the instrumentation helper that should be reused for
 	// each execution of the portal.
 	ihWrapper *instrumentationHelperWrapper
-
 	// The following 3 stacks store functions to call when close the portal.
 	// They should be called in this order:
 	// flowCleanup -> execStmtCleanup -> exhaustPortal.
-	// TODO(janexing): I'm not sure about which is better here. Now we hard code
-	// the execution order, but I was thinking about a sorted map, with layer name
-	// as the key and the stack as the value.
-	exhaustPortal cleanupFuncStack
-	// TODO(janexing): better name this field. It stores all cleanup funcs
-	// from execStmtInOpenState.
+	exhaustPortal   cleanupFuncStack
 	execStmtCleanup cleanupFuncStack
 	flowCleanup     cleanupFuncStack
 }
