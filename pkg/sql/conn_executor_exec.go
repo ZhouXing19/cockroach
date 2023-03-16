@@ -15,6 +15,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -53,7 +54,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -210,14 +210,12 @@ func (ex *connExecutor) execPortal(
 		if portal.isPausable() {
 			if !portal.pauseInfo.exhaustPortal.isComplete {
 				portal.pauseInfo.exhaustPortal.appendFunc(namedFunc{fName: "exhaust portal", f: func() {
-					if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-						ex.exhaustPortal(portalName)
-					}
+					ex.exhaustPortal(portalName)
 				}})
 				portal.pauseInfo.exhaustPortal.isComplete = true
 			}
-			// If we encountered an error when executing a pausable, clean up the retained
-			// resources.
+			// If we encountered an error when executing a pausable portal, clean up
+			// the retained resources.
 			if err != nil {
 				portal.pauseInfo.cleanupAll()
 			}
@@ -246,7 +244,7 @@ func (ex *connExecutor) execPortal(
 			return nil, nil, nil
 		}
 		ev, payload, err = ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
-		// For a non-pausable portal, it is considered exhausted regardless of the \
+		// For a non-pausable portal, it is considered exhausted regardless of the
 		// fact whether an error occurred or not - if it did, we still don't want
 		// to re-execute the portal from scratch.
 		// The current statement may have just closed and deleted the portal,
@@ -258,24 +256,6 @@ func (ex *connExecutor) execPortal(
 
 	default:
 		return ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
-	}
-}
-
-func isPausablePortal(portal *PreparedPortal) bool {
-	return portal != nil && portal.isPausable()
-}
-
-// For pausable portals, we delay the clean-up until closing the portal by
-// adding the function to the execStmtCleanup.
-// Otherwise, perform the clean-up step within every execution.
-func processCleanupFunc(portal *PreparedPortal, fName string, f func()) {
-	if !isPausablePortal(portal) {
-		f()
-	} else if !portal.pauseInfo.execStmtCleanup.isComplete {
-		portal.pauseInfo.execStmtCleanup.appendFunc(namedFunc{
-			fName: fName,
-			f:     f,
-		})
 	}
 }
 
@@ -300,6 +280,22 @@ func (ex *connExecutor) execStmtInOpenState(
 	res RestrictedCommandResult,
 	canAutoCommit bool,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
+	isPausablePortal := func(portal *PreparedPortal) bool {
+		return portal != nil && portal.isPausable()
+	}
+	// For pausable portals, we delay the clean-up until closing the portal by
+	// adding the function to the execStmtCleanup.
+	// Otherwise, perform the clean-up step within every execution.
+	processCleanupFunc := func(portal *PreparedPortal, fName string, f func()) {
+		if !isPausablePortal(portal) {
+			f()
+		} else if !portal.pauseInfo.execStmtCleanup.isComplete {
+			portal.pauseInfo.execStmtCleanup.appendFunc(namedFunc{
+				fName: fName,
+				f:     f,
+			})
+		}
+	}
 	defer func() {
 		// This is the first defer, so it will always be called after any cleanup
 		// func being added to the stack from the defers below.
@@ -324,16 +320,13 @@ func (ex *connExecutor) execStmtInOpenState(
 		defer func() {
 			spToFinish := sp
 			// For pausable portals, we need to persist the span as it shares the ctx
-			// with the underlying flow. If it got cleaned up before we clean up the
+			// with the underlying flow. If it gets cleaned up before we close the
 			// flow, we will hit `span used after finished` whenever we log an event
 			// when cleaning up the flow.
-			// TODO(janexing): maybe we should have 2 sets of span -- one for flow
-			// (i.e. that covers the whole lifetime of a portal) and another for each
-			// portal execution.
 			if isPausablePortal(portal) && portal.pauseInfo.sp != nil {
 				spToFinish = portal.pauseInfo.sp
 			}
-			processCleanupFunc(portal, "cleanup sp", spToFinish.Finish)
+			processCleanupFunc(portal, "cleanup span", spToFinish.Finish)
 		}()
 	}
 	ast := parserStmt.AST
@@ -382,7 +375,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	var txnDoneAfterFunc chan struct{}
 
 	var cancelQuery context.CancelFunc
-	ctx, cancelQuery = contextutil.WithCancel(ctx)
 
 	incrementExecutedStmtCntFunc := func() {
 		if retErr == nil && !payloadHasError(retPayload) {
@@ -391,6 +383,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 
 	addActiveQuery := func() {
+		// TODO(janexing): use debugger to confirm we'll cancel the correct ctx.
+		ctx, cancelQuery = contextutil.WithCancel(ctx)
 		ex.incrementStartedStmtCounter(ast)
 		func(st *txnState) {
 			st.mu.Lock()
@@ -404,6 +398,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	// the portal is executed for the first time.
 	if !isPausablePortal(portal) || !portal.pauseInfo.execStmtCleanup.isComplete {
 		addActiveQuery()
+		if isPausablePortal(portal) {
+			if portal.pauseInfo.cancelQueryFunc == nil {
+				portal.pauseInfo.cancelQueryFunc = cancelQuery
+			}
+			if portal.pauseInfo.cancelQueryCtx == nil {
+				portal.pauseInfo.cancelQueryCtx = ctx
+			}
+		}
 		defer func() {
 			processCleanupFunc(
 				portal,
@@ -432,26 +434,35 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 
-		// Detect context cancelation and overwrite whatever error might have been
-		// set on the result before. The idea is that once the query's context is
-		// canceled, all sorts of actors can detect the cancelation and set all
-		// sorts of errors on the result. Rather than trying to impose discipline
-		// in that jungle, we just overwrite them all here with an error that's
-		// nicer to look at for the client.
-		if res != nil && ctx.Err() != nil && res.Err() != nil {
-			// Even in the cases where the error is a retryable error, we want to
-			// intercept the event and payload returned here to ensure that the query
-			// is not retried.
-			retEv = eventNonRetriableErr{
-				IsCommit: fsm.FromBool(isCommit(ast)),
-			}
-			res.SetError(cancelchecker.QueryCanceledError)
-			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
-		}
-
 		processCleanupFunc(portal, "cancel query", func() {
+			cancelQueryCtx := ctx
+			cancelQueryFunc := cancelQuery
+			if isPausablePortal(portal) {
+				if portal.pauseInfo.cancelQueryCtx != nil {
+					cancelQueryCtx = portal.pauseInfo.cancelQueryCtx
+				}
+				if portal.pauseInfo.cancelQueryFunc != nil {
+					cancelQueryFunc = portal.pauseInfo.cancelQueryFunc
+				}
+			}
+			// Detect context cancelation and overwrite whatever error might have been
+			// set on the result before. The idea is that once the query's context is
+			// canceled, all sorts of actors can detect the cancelation and set all
+			// sorts of errors on the result. Rather than trying to impose discipline
+			// in that jungle, we just overwrite them all here with an error that's
+			// nicer to look at for the client.
+			if res != nil && cancelQueryCtx.Err() != nil && res.Err() != nil {
+				// Even in the cases where the error is a retryable error, we want to
+				// intercept the event and payload returned here to ensure that the query
+				// is not retried.
+				retEv = eventNonRetriableErr{
+					IsCommit: fsm.FromBool(isCommit(ast)),
+				}
+				res.SetError(cancelchecker.QueryCanceledError)
+				retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
+			}
 			ex.removeActiveQuery(queryID, ast)
-			cancelQuery()
+			cancelQueryFunc()
 			if ex.executorType != executorTypeInternal {
 				ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
 			}

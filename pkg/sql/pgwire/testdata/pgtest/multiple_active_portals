@@ -316,7 +316,7 @@ subtest end
 
 subtest more_complicated_stmts
 send
-Query {"String": "BEGIN; CREATE TABLE ta (x int, y int); CREATE TABLE tb (x int, z int); INSERT INTO ta VALUES (1,1), (2,2), (3,3); INSERT INTO tb VALUES (1,2), (2,3), (3,4)"}
+Query {"String": "BEGIN; DROP TABLE IF EXISTS ta; DROP TABLE IF EXISTS tb; CREATE TABLE ta (x int, y int); CREATE TABLE tb (x int, z int); INSERT INTO ta VALUES (1,1), (2,2), (3,3); INSERT INTO tb VALUES (1,2), (2,3), (3,4)"}
 Parse {"Name": "q11", "Query": "SELECT z as myz FROM ta JOIN tb ON ta.x = tb.x ORDER BY myz"}
 Bind {"DestinationPortal": "p11", "PreparedStatement": "q11"}
 Execute {"Portal": "p11", "MaxRows": 1}
@@ -328,6 +328,8 @@ ReadyForQuery
 ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
 {"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
@@ -367,10 +369,11 @@ Execute {"Portal": "p13", "MaxRows": 1}
 Sync
 ----
 
-# multiple acitve portal
+
 until crdb_only keepErrMessage
 ReadyForQuery
 ErrorResponse
+ReadyForQuery
 ----
 {"Type":"CommandComplete","CommandTag":"BEGIN"}
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
@@ -384,5 +387,70 @@ ErrorResponse
 {"Type":"DataRow","Values":[{"text":"2"}]}
 {"Type":"PortalSuspended"}
 {"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported, please set sql.defaults.multiple_active_portals.enabled to true. (Note this feature is in preview)"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+subtest end
+
+subtest query_timeout
+send
+Query {"String": "BEGIN"}
+Query {"String": "SET statement_timeout='2s'"}
+Parse {"Name": "q1", "Query": "SELECT i, pg_sleep(0.5) FROM generate_series(1, 6) AS g(i)"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only keepErrMessage
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"42P05","Message":"prepared statement \"q1\" already exists"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+until noncrdb_only keepErrMessage
+ReadyForQuery
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ErrorResponse","Code":"42P05","Message":"prepared statement \"q1\" already exists"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+
+send
+Query {"String": "COMMIT"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
 
 subtest end

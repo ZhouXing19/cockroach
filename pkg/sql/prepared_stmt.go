@@ -257,6 +257,11 @@ type portalPauseInfo struct {
 	// ihWrapper stores the instrumentation helper that should be reused for
 	// each execution of the portal.
 	ihWrapper *instrumentationHelperWrapper
+	// cancelQueryFunc will be called to cancel the context of the query when
+	// the portal is closed.
+	cancelQueryFunc context.CancelFunc
+	// cancelQueryCtx is the context to be canceled when closing the portal.
+	cancelQueryCtx context.Context
 	// The following 3 stacks store functions to call when close the portal.
 	// They should be called in this order:
 	// flowCleanup -> execStmtCleanup -> exhaustPortal.
