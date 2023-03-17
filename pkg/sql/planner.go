@@ -203,7 +203,7 @@ type planner struct {
 	StmtNoConstantsWithHomeRegionEnforced string
 
 	// portal is set when the query is from a portal.
-	portal *PreparedPortal
+	pausablePortal *PreparedPortal
 
 	instrumentation instrumentationHelper
 
@@ -267,7 +267,7 @@ type planner struct {
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
 // portal. We reuse the flow stored in p.portal.pauseInfo.
 func (p *planner) hasFlowForPausablePortal() bool {
-	return p.portal != nil && p.portal.pauseInfo != nil && p.portal.pauseInfo.flow != nil
+	return p.pausablePortal != nil && p.pausablePortal.pauseInfo != nil && p.pausablePortal.pauseInfo.flow != nil
 }
 
 // resumeFlowForPausablePortal is called when re-executing a portal. We reuse
@@ -277,8 +277,8 @@ func (p *planner) resumeFlowForPausablePortal(ctx context.Context, recv *DistSQL
 		return errors.AssertionFailedf("no flow found for pausable portal")
 	}
 	recv.discardRows = p.instrumentation.ShouldDiscardRows()
-	recv.outputTypes = p.portal.pauseInfo.outputTypes
-	p.portal.pauseInfo.flow.Resume(ctx, recv)
+	recv.outputTypes = p.pausablePortal.pauseInfo.outputTypes
+	p.pausablePortal.pauseInfo.flow.Resume(ctx, recv)
 	return recv.commErr
 }
 
@@ -870,7 +870,7 @@ func (p *planner) resetPlanner(
 	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
-	p.portal = nil
+	p.pausablePortal = nil
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.

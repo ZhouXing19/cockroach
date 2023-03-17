@@ -884,8 +884,8 @@ func (p *PlanningCtx) IsLocal() bool {
 // getPortalPauseInfo returns the portal pause info if the current planner is
 // for a pausable portal. Otherwise, returns nil.
 func (p *PlanningCtx) getPortalPauseInfo() *portalPauseInfo {
-	if p.planner != nil && p.planner.portal != nil && p.planner.portal.pauseInfo != nil {
-		return p.planner.portal.pauseInfo
+	if p.planner != nil && p.planner.pausablePortal != nil && p.planner.pausablePortal.pauseInfo != nil {
+		return p.planner.pausablePortal.pauseInfo
 	}
 	return nil
 }

@@ -1615,7 +1615,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 
 	if p := planCtx.getPortalPauseInfo(); p != nil {
 		if buildutil.CrdbTestBuild && planCtx.getPortalPauseInfo().flow == nil {
-			checkErr := errors.AssertionFailedf("flow for portal %s cannot be found", planner.portal.Name)
+			checkErr := errors.AssertionFailedf("flow for portal %s cannot be found", planner.pausablePortal.Name)
 			if recv.commErr != nil {
 				recv.commErr = errors.CombineErrors(recv.commErr, checkErr)
 			} else {

@@ -863,7 +863,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.Annotations = &p.semaCtx.Annotations
 	p.stmt = stmt
 	if isPausablePortal(portal) {
-		p.portal = portal
+		p.pausablePortal = portal
 	}
 	p.cancelChecker.Reset(ctx)
 
@@ -1459,7 +1459,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	distSQLMode := ex.sessionData().DistSQLMode
 	// We only allow non-distributed plan for pausable portals.
-	if planner.portal != nil {
+	if planner.pausablePortal != nil {
 		distSQLMode = sessiondatapb.DistSQLOff
 	}
 	distributePlan := getPlanDistribution(
@@ -1954,7 +1954,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			if planCtx.getPortalPauseInfo() != nil {
 				// With pauseInfo is nil, no cleanup function will be added to the stack
 				// and all clean-up steps will be performed as for normal portals.
-				planCtx.planner.portal.pauseInfo = nil
+				planCtx.planner.pausablePortal.pauseInfo = nil
 				// We need this so that the result consumption for this portal cannot be
 				// paused either.
 				res.UnsetForPausablePortal()
