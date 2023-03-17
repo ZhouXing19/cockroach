@@ -270,7 +270,7 @@ type BindStmt struct {
 	// If internalArgs is specified, Args and ArgFormatCodes are ignored.
 	internalArgs []tree.Datum
 
-	// isInternal is set ture when the bind stmt is from an internal executor.
+	// isInternal is set to ture when the bind stmt is from an internal executor.
 	isInternal bool
 }
 

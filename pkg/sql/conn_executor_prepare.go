@@ -497,15 +497,9 @@ func (ex *connExecutor) addPortal(
 	outFormats []pgwirebase.FormatCode,
 ) error {
 	if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-		if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-			return nil
-		}
 		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
 	if cursor := ex.getCursorAccessor().getCursor(tree.Name(portalName)); cursor != nil {
-		if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-			return nil
-		}
 		panic(errors.AssertionFailedf("portal already exists: %q", portalName))
 	}
 

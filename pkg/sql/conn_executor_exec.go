@@ -15,7 +15,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -54,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -357,7 +357,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := portal != nil && portal.Stmt != nil
-
 	if isExtendedProtocol {
 		stmt = makeStatementFromPrepared(portal.Stmt, queryID)
 	} else {
@@ -368,13 +367,10 @@ func (ex *connExecutor) execStmtInOpenState(
 	var txnTimeoutTicker *time.Timer
 	queryTimedOut := false
 	txnTimedOut := false
-
 	// queryDoneAfterFunc and txnDoneAfterFunc will be allocated only when
 	// queryTimeoutTicker or txnTimeoutTicker is non-nil.
 	var queryDoneAfterFunc chan struct{}
 	var txnDoneAfterFunc chan struct{}
-
-	var cancelQuery context.CancelFunc
 
 	incrementExecutedStmtCntFunc := func() {
 		if retErr == nil && !payloadHasError(retPayload) {
@@ -382,6 +378,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
+	var cancelQuery context.CancelFunc
 	addActiveQuery := func() {
 		// TODO(janexing): use debugger to confirm we'll cancel the correct ctx.
 		ctx, cancelQuery = contextutil.WithCancel(ctx)
@@ -1954,7 +1951,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 				factoryEvalCtx.SessionID = planner.ExtendedEvalContext().SessionID
 				return factoryEvalCtx
 			}
-			// We don't sub / post queries for pausable portal. Set it back to an
+			// We don't allow sub / post queries for pausable portal. Set it back to an
 			// un-pausable (normal) portal.
 			if planCtx.getPortalPauseInfo() != nil {
 				// With pauseInfo is nil, no cleanup function will be added to the stack

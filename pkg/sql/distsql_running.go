@@ -1628,7 +1628,6 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 			flow := p.flow
 			p.flowCleanup.appendFunc(namedFunc{
 				fName: "cleanup flow", f: func() {
-					flow.GetFlowCtx().Mon.RelinquishAllOnReleaseBytes()
 					flow.Cleanup(ctx)
 				},
 			})
