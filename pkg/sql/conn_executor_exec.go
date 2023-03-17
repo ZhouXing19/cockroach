@@ -378,10 +378,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
-	var cancelQuery context.CancelFunc
+	ctx, cancelQuery := contextutil.WithCancel(ctx)
+
 	addActiveQuery := func() {
-		// TODO(janexing): use debugger to confirm we'll cancel the correct ctx.
-		ctx, cancelQuery = contextutil.WithCancel(ctx)
 		ex.incrementStartedStmtCounter(ast)
 		func(st *txnState) {
 			st.mu.Lock()
@@ -460,10 +459,11 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 			ex.removeActiveQuery(queryID, ast)
 			cancelQueryFunc()
-			if ex.executorType != executorTypeInternal {
-				ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
-			}
 		})
+
+		if ex.executorType != executorTypeInternal {
+			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)
+		}
 
 		// If the query timed out, we intercept the error, payload, and event here
 		// for the same reasons we intercept them for canceled queries above.
@@ -1439,6 +1439,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
 	}()
 
+	// TODO(sql-sessions): fix the phase time for pausable portals.
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndLogicalPlan, timeutil.Now())
 	ex.sessionTracing.TracePlanEnd(ctx, err)
 
@@ -1474,6 +1475,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), planner.Descriptors())
 	}
 
+	// TODO(sql-sessions): fix the phase time for pausable portals.
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartExecStmt, timeutil.Now())
 
 	progAtomic, err := func() (*uint64, error) {
@@ -1547,6 +1549,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 	}
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
+	// TODO(sql-sessions): fix the phase time for pausable portals.
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
 
 	ex.extraTxnState.rowsRead += stats.rowsRead
@@ -1959,7 +1962,9 @@ func (ex *connExecutor) execWithDistSQLEngine(
 				planCtx.planner.pausablePortal.pauseInfo = nil
 				// We need this so that the result consumption for this portal cannot be
 				// paused either.
-				res.UnsetForPausablePortal()
+				if err := res.UnsetForPausablePortal(); err != nil {
+					return recv.stats, err
+				}
 			}
 		}
 		err = ex.server.cfg.DistSQLPlanner.PlanAndRunAll(ctx, evalCtx, planCtx, planner, recv, evalCtxFactory)

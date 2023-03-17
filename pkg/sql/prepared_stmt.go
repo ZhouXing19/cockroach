@@ -124,6 +124,19 @@ type preparedStatementsAccessor interface {
 	DeleteAll(ctx context.Context)
 }
 
+// PortalPausablity mark if the portal is pausable and the reason. This is
+// needed to give the correct hint for usage of multiple active portals.
+type PortalPausablity int64
+
+const (
+	PortalPausabilityNotset PortalPausablity = iota
+	PausablePortal
+	// NotPausablePortalDueToUnsupportedStmt is used when the cluster setting
+	// sql.multiple_modifications_of_table.enabled is set to true, while the
+	// we don't support underlying statement it.
+	NotPausablePortalDueToUnsupportedStmt
+)
+
 // PreparedPortal is a PreparedStatement that has been bound with query
 // arguments.
 type PreparedPortal struct {
@@ -138,6 +151,8 @@ type PreparedPortal struct {
 	// meaning that any additional attempts to execute it should return no
 	// rows.
 	exhausted bool
+
+	portalPausablity PortalPausablity
 
 	// pauseInfo is the saved info needed for a pausable portal.
 	pauseInfo *portalPauseInfo
@@ -160,12 +175,20 @@ func (ex *connExecutor) makePreparedPortal(
 		Qargs:      qargs,
 		OutFormats: outFormats,
 	}
-	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
-		// TODO(janexing): maybe we should also add telemetry for the stmt that the
-		// portal hooks on.
+	// TODO(janexing): maybe we should also add telemetry for the stmt that the
+	// portal hooks on.
+	enableMultipleActivePortals.SetOnChange(&ex.server.cfg.Settings.SV, func(ctx context.Context) {
 		telemetry.Inc(sqltelemetry.MultipleActivePortalCounter)
-		if tree.IsReadOnly(stmt.AST) && !isInternal {
-			portal.pauseInfo = &portalPauseInfo{}
+	})
+
+	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
+		if !isInternal {
+			if tree.IsReadOnly(stmt.AST) {
+				portal.pauseInfo = &portalPauseInfo{}
+				portal.portalPausablity = PausablePortal
+			} else {
+				portal.portalPausablity = NotPausablePortalDueToUnsupportedStmt
+			}
 		}
 	}
 	return portal, portal.accountForCopy(ctx, &ex.extraTxnState.prepStmtsNamespaceMemAcc, name)
@@ -236,7 +259,7 @@ type instrumentationHelperWrapper struct {
 	ih instrumentationHelper
 }
 
-// portalPauseInfo stored info that enables the pause of a portal. After pausing
+// portalPauseInfo stores info that enables the pause of a portal. After pausing
 // the portal, execute any other statement, and come back to re-execute it or
 // close it.
 type portalPauseInfo struct {

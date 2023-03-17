@@ -663,7 +663,7 @@ type ClientComm interface {
 		limit int,
 		portalName string,
 		implicitTxn bool,
-		forPausablePortal bool,
+		portalPausability PortalPausablity,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult
@@ -817,7 +817,7 @@ type RestrictedCommandResult interface {
 
 	// UnsetForPausablePortal is to set the forPausablePortal field to false for
 	// pgwire.limitedCommandResult, so that the portal becomes un-pausable.
-	UnsetForPausablePortal()
+	UnsetForPausablePortal() error
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -973,7 +973,8 @@ var _ RestrictedCommandResult = &streamingCommandResult{}
 var _ CommandResultClose = &streamingCommandResult{}
 
 // UnsetForPausablePortal is part of the sql.RestrictedCommandResult interface.
-func (r *streamingCommandResult) UnsetForPausablePortal() {
+func (r *streamingCommandResult) UnsetForPausablePortal() error {
+	return errors.AssertionFailedf("forPausablePortal is for limitedCommandResult only")
 }
 
 // SetColumns is part of the RestrictedCommandResult interface.

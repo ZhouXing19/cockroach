@@ -1102,7 +1102,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ int,
 	_ string,
 	_ bool,
-	_ bool,
+	_ PortalPausablity,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

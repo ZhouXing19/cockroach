@@ -2,11 +2,9 @@ send crdb_only
 Query {"String": "SET CLUSTER SETTING sql.defaults.multiple_active_portals.enabled = true"}
 ----
 
-# TODO(janexing): is there a way to ignore the notice for cluster setting?
-until crdb_only
+until crdb_only ignore=NoticeResponse
 ReadyForQuery
 ----
-{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"setting global default sql.defaults.multiple_active_portals.enabled is not recommended","Detail":"","Hint":"use the `ALTER ROLE ... SET` syntax to control session variable defaults at a finer-grained level. See: https://www.cockroachlabs.com/docs/v23.1/alter-role.html#set-default-session-variable-values-for-a-role","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"set_cluster_setting.go","Line":248,"Routine":"startExec","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"SET CLUSTER SETTING"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
@@ -357,7 +355,7 @@ ReadyForQuery
 subtest end
 
 
-subtest subqueries
+subtest not_supported_statements
 send crdb_only
 Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int)"}
 Parse {"Name": "q12", "Query": "WITH t AS (INSERT INTO t(x) VALUES (1), (2), (3) RETURNING x) SELECT * FROM t;"}
@@ -386,7 +384,7 @@ ReadyForQuery
 {"Type":"PortalSuspended"}
 {"Type":"DataRow","Values":[{"text":"2"}]}
 {"Type":"PortalSuspended"}
-{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: multiple active portals not supported, please set sql.defaults.multiple_active_portals.enabled to true. (Note this feature is in preview)"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 send crdb_only
@@ -399,6 +397,87 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"ROLLBACK"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
+send crdb_only
+Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int); INSERT INTO t VALUES (1), (2), (3)"}
+Parse {"Name": "q14", "Query": "UPDATE t SET x = 10 WHERE true RETURNING x;"}
+Bind {"DestinationPortal": "p15", "PreparedStatement": "q14"}
+Bind {"DestinationPortal": "p16", "PreparedStatement": "q14"}
+Execute {"Portal": "p15", "MaxRows": 1}
+Execute {"Portal": "p16", "MaxRows": 1}
+Execute {"Portal": "p15", "MaxRows": 1}
+Sync
+----
+
+until crdb_only keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "BEGIN; DROP TABLE IF EXISTS t; CREATE TABLE t (x int)"}
+Parse {"Name": "q17", "Query": "INSERT INTO t VALUES (1), (2), (3) RETURNING x;"}
+Bind {"DestinationPortal": "p17", "PreparedStatement": "q17"}
+Bind {"DestinationPortal": "p18", "PreparedStatement": "q17"}
+Execute {"Portal": "p17", "MaxRows": 1}
+Execute {"Portal": "p18", "MaxRows": 1}
+Execute {"Portal": "p17", "MaxRows": 1}
+Sync
+----
+
+
+until crdb_only keepErrMessage
+ReadyForQuery
+ErrorResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"0A000","Message":"unimplemented: the statement for a pausable portal must be a read-only SELECT query with no sub-queries or post-queries"}
+{"Type":"ReadyForQuery","TxStatus":"E"}
+
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ROLLBACK"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+
+
 
 subtest end
 
@@ -406,16 +485,18 @@ subtest query_timeout
 send
 Query {"String": "BEGIN"}
 Query {"String": "SET statement_timeout='2s'"}
-Parse {"Name": "q1", "Query": "SELECT i, pg_sleep(0.5) FROM generate_series(1, 6) AS g(i)"}
-Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
-Execute {"Portal": "p1", "MaxRows": 1}
-Execute {"Portal": "p1", "MaxRows": 1}
-Execute {"Portal": "p1", "MaxRows": 1}
-Execute {"Portal": "p1", "MaxRows": 1}
-Execute {"Portal": "p1", "MaxRows": 1}
+Parse {"Name": "q20", "Query": "SELECT i, pg_sleep(0.5) FROM generate_series(1, 6) AS g(i)"}
+Bind {"DestinationPortal": "p20", "PreparedStatement": "q20"}
+Execute {"Portal": "p20", "MaxRows": 1}
+Execute {"Portal": "p20", "MaxRows": 1}
+Execute {"Portal": "p20", "MaxRows": 1}
+Execute {"Portal": "p20", "MaxRows": 1}
+Execute {"Portal": "p20", "MaxRows": 1}
 Sync
 ----
 
+# The output for pg_sleep differ between cockroach and postgres:
+# https://github.com/cockroachdb/cockroach/issues/98913
 until crdb_only keepErrMessage
 ReadyForQuery
 ReadyForQuery
@@ -426,7 +507,15 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ErrorResponse","Code":"42P05","Message":"prepared statement \"q1\" already exists"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"},{"text":"t"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"57014","Message":"query execution canceled due to statement timeout"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
 
 until noncrdb_only keepErrMessage
@@ -439,9 +528,18 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"T"}
 {"Type":"CommandComplete","CommandTag":"SET"}
 {"Type":"ReadyForQuery","TxStatus":"T"}
-{"Type":"ErrorResponse","Code":"42P05","Message":"prepared statement \"q1\" already exists"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"2"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"3"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"DataRow","Values":[{"text":"4"},null]}
+{"Type":"PortalSuspended"}
+{"Type":"ErrorResponse","Code":"57014","Message":"canceling statement due to statement timeout"}
 {"Type":"ReadyForQuery","TxStatus":"E"}
-
 
 send
 Query {"String": "COMMIT"}

@@ -1990,7 +1990,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				0,  /* limit */
 				"", /* portalName */
 				ex.implicitTxn(),
-				false, /* forPausablePortal */
+				PortalPausabilityNotset, /* portalPausability */
 			)
 			res = stmtRes
 
@@ -2073,7 +2073,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				tcmd.Limit,
 				portalName,
 				ex.implicitTxn(),
-				portal.isPausable(),
+				portal.portalPausablity,
 			)
 			res = stmtRes
 
@@ -2093,6 +2093,7 @@ func (ex *connExecutor) execCmd() (retErr error) {
 		// - ex.statsCollector merely contains a copy of the times, that
 		//   was created when the statement started executing (via the
 		//   reset() method).
+		// TODO(sql-sessions): fix the phase time for pausable portals.
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionQueryServiced, timeutil.Now())
 		if err != nil {
 			return err

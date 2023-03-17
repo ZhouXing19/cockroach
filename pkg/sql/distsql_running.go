@@ -842,6 +842,7 @@ func (dsp *DistSQLPlanner) Run(
 			ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 		)
 		if m != nil {
+			// TODO(yuzefovich): add a check that this flow runs in a single goroutine.
 			m.flow = flow
 			m.outputTypes = plan.GetResultTypes()
 		}
@@ -1384,7 +1385,7 @@ func (r *DistSQLReceiver) handleCommErr(commErr error) {
 		// sql/pgwire.limitedCommandResult.moreResultsNeeded). Instead of
 		// changing the signature of AddRow, we have a sentinel error that
 		// is handled specially here.
-		if !errors.Is(commErr, ErrLimitedResultNotSupported) {
+		if !errors.Is(commErr, ErrLimitedResultNotSupported) && !errors.Is(commErr, ErrStmtNotSupportedForPausablePortal) {
 			r.commErr = commErr
 		}
 	}
@@ -1532,6 +1533,14 @@ var (
 		"multiple active portals not supported, "+
 			"please set sql.defaults.multiple_active_portals.enabled to true. "+
 			"(Note this feature is in preview)",
+	)
+	// ErrStmtNotSupportedForPausablePortal is returned when the user have set
+	// sql.defaults.multiple_active_portals.enabled to true but set an unsupported
+	// statement for a portal.
+	ErrStmtNotSupportedForPausablePortal = unimplemented.NewWithIssue(
+		98911,
+		"the statement for a pausable portal must be a read-only SELECT query"+
+			" with no sub-queries or post-queries",
 	)
 	// ErrLimitedResultClosed is a sentinel error produced by pgwire
 	// indicating the portal should be closed without error.

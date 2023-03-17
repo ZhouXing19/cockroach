@@ -119,7 +119,9 @@ type paramStatusUpdate struct {
 var _ sql.CommandResult = &commandResult{}
 
 // UnsetForPausablePortal is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) UnsetForPausablePortal() {}
+func (r *commandResult) UnsetForPausablePortal() error {
+	return errors.AssertionFailedf("forPausablePortal is for limitedCommandResult only")
+}
 
 // Close is part of the sql.RestrictedCommandResult interface.
 func (r *commandResult) Close(ctx context.Context, t sql.TransactionStatusIndicator) {
@@ -386,7 +388,7 @@ func (c *conn) newCommandResult(
 	limit int,
 	portalName string,
 	implicitTxn bool,
-	forPausablePortal bool,
+	portalPausability sql.PortalPausablity,
 ) sql.CommandResult {
 	r := c.allocCommandResult()
 	*r = commandResult{
@@ -405,11 +407,11 @@ func (c *conn) newCommandResult(
 	}
 	telemetry.Inc(sqltelemetry.PortalWithLimitRequestCounter)
 	return &limitedCommandResult{
-		limit:             limit,
-		portalName:        portalName,
-		implicitTxn:       implicitTxn,
-		commandResult:     r,
-		forPausablePortal: forPausablePortal,
+		limit:            limit,
+		portalName:       portalName,
+		implicitTxn:      implicitTxn,
+		commandResult:    r,
+		portalPausablity: portalPausability,
 	}
 }
 
@@ -450,9 +452,9 @@ type limitedCommandResult struct {
 	seenTuples int
 	// If set, an error will be sent to the client if more rows are produced than
 	// this limit.
-	limit             int
-	reachedLimit      bool
-	forPausablePortal bool
+	limit            int
+	reachedLimit     bool
+	portalPausablity sql.PortalPausablity
 }
 
 var _ sql.RestrictedCommandResult = &limitedCommandResult{}
@@ -471,7 +473,7 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 		if err := r.conn.Flush(r.pos); err != nil {
 			return err
 		}
-		if r.forPausablePortal {
+		if r.portalPausablity == sql.PausablePortal {
 			r.reachedLimit = true
 			return sql.ErrPortalLimitHasBeenReached
 		} else {
@@ -487,8 +489,9 @@ func (r *limitedCommandResult) AddRow(ctx context.Context, row tree.Datums) erro
 }
 
 // UnsetForPausablePortal is part of the sql.RestrictedCommandResult interface.
-func (r *limitedCommandResult) UnsetForPausablePortal() {
-	r.forPausablePortal = false
+func (r *limitedCommandResult) UnsetForPausablePortal() error {
+	r.portalPausablity = sql.NotPausablePortalDueToUnsupportedStmt
+	return nil
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.
@@ -502,6 +505,17 @@ func (r *limitedCommandResult) SupportsAddBatch() bool {
 // when a limit has been specified.
 func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 	// Keep track of the previous CmdPos so we can rewind if needed.
+	errBasedOnPausability := func(pausablity sql.PortalPausablity) error {
+		switch pausablity {
+		case sql.PortalPausabilityNotset:
+			return sql.ErrLimitedResultNotSupported
+		case sql.NotPausablePortalDueToUnsupportedStmt:
+			return sql.ErrStmtNotSupportedForPausablePortal
+		default:
+			return errors.AssertionFailedf("unsupported pausability type for a portal")
+		}
+	}
+
 	prevPos := r.conn.stmtBuf.AdvanceOne()
 	for {
 		cmd, curPos, err := r.conn.stmtBuf.CurCmd()
@@ -515,7 +529,7 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// next message is a delete portal.
 			if c.Type != pgwirebase.PreparePortal || c.Name != r.portalName {
 				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
 					"cannot close a portal while a different one is open")
 			}
 			return r.rewindAndClosePortal(ctx, prevPos)
@@ -523,7 +537,7 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			// The happy case: the client wants more rows from the portal.
 			if c.Name != r.portalName {
 				telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-				return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+				return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
 					"cannot execute a portal while a different one is open")
 			}
 			r.limit = c.Limit
@@ -566,7 +580,7 @@ func (r *limitedCommandResult) moreResultsNeeded(ctx context.Context) error {
 			}
 			// We got some other message, but we only support executing to completion.
 			telemetry.Inc(sqltelemetry.InterleavedPortalRequestCounter)
-			return errors.WithDetail(sql.ErrLimitedResultNotSupported,
+			return errors.WithDetail(errBasedOnPausability(r.portalPausablity),
 				fmt.Sprintf("cannot perform operation %T while a different portal is open", c))
 		}
 		prevPos = curPos
