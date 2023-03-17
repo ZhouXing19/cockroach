@@ -800,8 +800,13 @@ func (ex *connExecutor) execStmtInOpenState(
 	// For regular statements (the ones that get to this point), we
 	// don't return any event unless an error happens.
 
-	if err := ex.handleAOST(ctx, ast); err != nil {
-		return makeErrEvent(err)
+	// For a portal (prepared stmt), since handleAOST() is called in when
+	// preparing the statement, and this function is idempotent, we don't need to
+	// call it again during execution.
+	if portal == nil {
+		if err := ex.handleAOST(ctx, ast); err != nil {
+			return makeErrEvent(err)
+		}
 	}
 
 	// The first order of business is to ensure proper sequencing
