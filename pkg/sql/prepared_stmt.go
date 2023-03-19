@@ -184,7 +184,7 @@ func (ex *connExecutor) makePreparedPortal(
 	if enableMultipleActivePortals.Get(&ex.server.cfg.Settings.SV) {
 		if !isInternal {
 			if tree.IsReadOnly(stmt.AST) {
-				portal.pauseInfo = &portalPauseInfo{}
+				portal.pauseInfo = &portalPauseInfo{queryStats: &topLevelQueryStats{}}
 				portal.portalPausablity = PausablePortal
 			} else {
 				portal.portalPausablity = NotPausablePortalDueToUnsupportedStmt
@@ -288,15 +288,21 @@ type portalPauseInfo struct {
 	// The following 3 stacks store functions to call when close the portal.
 	// They should be called in this order:
 	// flowCleanup -> execStmtCleanup -> exhaustPortal.
-	exhaustPortal   cleanupFuncStack
-	execStmtCleanup cleanupFuncStack
-	flowCleanup     cleanupFuncStack
+	exhaustPortal       cleanupFuncStack
+	execStmtCleanup     cleanupFuncStack
+	dispatchStmtCleanup cleanupFuncStack
+	flowCleanup         cleanupFuncStack
+
+	planTop planTop
+
+	queryStats *topLevelQueryStats
 }
 
 // cleanupAll is to run all the cleanup layers.
 func (pm *portalPauseInfo) cleanupAll() {
 	pm.flowCleanup.run()
 	pm.execStmtCleanup.run()
+	pm.dispatchStmtCleanup.run()
 	pm.exhaustPortal.run()
 }
 

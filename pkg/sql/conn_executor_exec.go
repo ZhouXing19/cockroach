@@ -305,6 +305,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// If there's any error, do the cleanup right here.
 		if (retErr != nil || payloadHasError(retPayload)) && isPausablePortal(portal) {
 			portal.pauseInfo.flowCleanup.run()
+			portal.pauseInfo.dispatchStmtCleanup.run()
 			portal.pauseInfo.execStmtCleanup.run()
 		}
 	}()
@@ -1376,7 +1377,25 @@ func (ex *connExecutor) rollbackSQLTransaction(
 // producing an appropriate state machine event.
 func (ex *connExecutor) dispatchToExecutionEngine(
 	ctx context.Context, planner *planner, res RestrictedCommandResult,
-) error {
+) (err error) {
+	getPausablePortalInfo := func() *portalPauseInfo {
+		if planner != nil && planner.pausablePortal != nil {
+			return planner.pausablePortal.pauseInfo
+		}
+		return nil
+	}
+	defer func() {
+		if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+			if !ppInfo.dispatchStmtCleanup.isComplete {
+				ppInfo.dispatchStmtCleanup.isComplete = true
+			}
+			if err != nil || res.Err() != nil {
+				ppInfo.flowCleanup.run()
+				ppInfo.dispatchStmtCleanup.run()
+			}
+		}
+	}()
+
 	stmt := planner.stmt
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	// TODO(sql-sessions): fix the phase time for pausable portals.
@@ -1405,12 +1424,26 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			ex.extraTxnState.hasAdminRoleCache.IsSet = true
 		}
 	}
-	// Prepare the plan. Note, the error is processed below. Everything
-	// between here and there needs to happen even if there's an error.
-	err := ex.makeExecPlan(ctx, planner)
-	// We'll be closing the plan manually below after execution; this
-	// defer is a catch-all in case some other return path is taken.
-	defer planner.curPlan.close(ctx)
+
+	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		if !ppInfo.dispatchStmtCleanup.isComplete {
+			err = ex.makeExecPlan(ctx, planner)
+			ppInfo.planTop = planner.curPlan
+			ppInfo.dispatchStmtCleanup.appendFunc(namedFunc{
+				fName: "close planTop",
+				f:     func() { ppInfo.planTop.close(ctx) },
+			})
+		} else {
+			planner.curPlan = ppInfo.planTop
+		}
+	} else {
+		// Prepare the plan. Note, the error is processed below. Everything
+		// between here and there needs to happen even if there's an error.
+		err = ex.makeExecPlan(ctx, planner)
+		// We'll be closing the plan manually below after execution; this
+		// defer is a catch-all in case some other return path is taken.
+		defer planner.curPlan.close(ctx)
+	}
 
 	// include gist in error reports
 	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
@@ -1436,7 +1469,17 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		case *tree.Import, *tree.Restore, *tree.Backup:
 			bulkJobId = res.GetBulkJobId()
 		}
-		planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
+		if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchStmtCleanup.isComplete {
+			ppInfo.dispatchStmtCleanup.appendFunc(namedFunc{
+				fName: "log statement",
+				f: func() {
+					planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, ppInfo.queryStats)
+				},
+			})
+		} else {
+			planner.maybeLogStatement(ctx, ex.executorType, false, int(ex.state.mu.autoRetryCounter), ex.extraTxnState.txnCounter, nonBulkJobNumRows, bulkJobId, res.Err(), ex.statsCollector.PhaseTimes().GetSessionPhaseTime(sessionphase.SessionQueryReceived), &ex.extraTxnState.hasAdminRoleCache, ex.server.TelemetryLoggingMetrics, stmtFingerprintID, &stats)
+		}
+
 	}()
 
 	// TODO(sql-sessions): fix the phase time for pausable portals.
@@ -1509,6 +1552,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// stats) to the execution engine. That's a lot of responsibility
 	// to transfer! It would be better if this responsibility remained
 	// around here.
+	// TODO(janexing): should we postpone this for pausable portals?
 	planner.curPlan.flags.Set(planFlagExecDone)
 	if !planner.ExecCfg().Codec.ForSystemTenant() {
 		planner.curPlan.flags.Set(planFlagTenant)
@@ -1535,6 +1579,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	stats, err = ex.execWithDistSQLEngine(
 		ctx, planner, stmt.AST.StatementReturnType(), res, distribute, progAtomic,
 	)
+	if ppInfo := getPausablePortalInfo(); ppInfo != nil {
+		ppInfo.queryStats.add(&stats)
+	}
+
 	if res.Err() == nil {
 		isSetOrShow := stmt.AST.StatementTag() == "SET" || stmt.AST.StatementTag() == "SHOW"
 		if ex.sessionData().InjectRetryErrorsEnabled && !isSetOrShow &&
@@ -1556,7 +1604,16 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+	if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchStmtCleanup.isComplete {
+		ppInfo.dispatchStmtCleanup.appendFunc(namedFunc{
+			fName: "populate query level stats and regions",
+			f: func() {
+				populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, ppInfo.queryStats, &ex.cpuStatsCollector)
+			},
+		})
+	} else {
+		populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
+	}
 
 	// The transaction (from planner.txn) may already have been committed at this point,
 	// due to one-phase commit optimization or an error. Since we use that transaction
@@ -1576,7 +1633,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		int(ex.state.mu.autoRetryCounter), res.RowsAffected(), res.Err(), stats,
 	)
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
-		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
+		if ppInfo := getPausablePortalInfo(); ppInfo != nil && !ppInfo.dispatchStmtCleanup.isComplete {
+			afterExecuteTestingKnobs := ex.server.cfg.TestingKnobs.AfterExecute
+			ppInfo.dispatchStmtCleanup.appendFunc(namedFunc{
+				fName: "run testing knobs after execute",
+				f:     func() { afterExecuteTestingKnobs(ctx, stmt.String(), res.Err()) },
+			})
+		} else {
+			ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
+		}
 	}
 
 	if limitsErr := ex.handleTxnRowsWrittenReadLimits(ctx); limitsErr != nil && res.Err() == nil {
