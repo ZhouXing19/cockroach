@@ -2,6 +2,16 @@
 # handling. That is, the -rewrite flag, when used with Postgres, will
 # produce different results than Cockroach.
 
+send crdb_only
+Query {"String": "SET multiple_active_portals_enabled = false"}
+----
+
+until crdb_only ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
 only crdb
 ----
 
