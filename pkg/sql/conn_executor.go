@@ -2195,6 +2195,10 @@ func (ex *connExecutor) execCmd() (retErr error) {
 				Values: portal.Qargs,
 			}
 
+			if tcmd.Limit == 0 && portal.pauseInfo != nil && portal.pauseInfo.curRes == nil {
+				portal.pauseInfo = nil
+			}
+
 			stmtRes := ex.clientComm.CreateStatementResult(
 				portal.Stmt.AST,
 				// The client is using the extended protocol, so no row description is
