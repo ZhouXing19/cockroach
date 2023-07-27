@@ -716,6 +716,7 @@ func setupRDSCluster(
 			); err != nil {
 				return err
 			}
+			t.L().Printf("successfully executed %q\n", stmt)
 		}
 		*sourcePGConn = pgConn
 		return nil
