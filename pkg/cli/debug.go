@@ -1467,6 +1467,7 @@ func init() {
 	DebugCmd.AddCommand(declarativePrintRules)
 
 	debugStatementBundleCmd.AddCommand(statementBundleRecreateCmd)
+	debugStatementBundleCmd.AddCommand(statementBundleAgentCmd)
 	DebugCmd.AddCommand(debugStatementBundleCmd)
 
 	DebugCmd.AddCommand(debugJobTraceFromClusterCmd)
