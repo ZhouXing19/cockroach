@@ -56,6 +56,8 @@ type Metadata struct {
 
 	// ASTWithInjectedHints is the AST rewritten with injected hints.
 	ASTWithInjectedHints tree.Statement
+
+	UDTs []*types.T
 }
 
 // MemoryEstimate returns an estimation (in bytes) of how much memory is used by
