@@ -708,6 +708,16 @@ func (expr *CastExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
+	// When casting a concrete tuple type to RECORD (AnyTuple), elide the cast.
+	// The cast is a no-op (as documented in resolveCast), and the datum retains
+	// its original type at execution time. Preserving the source type matches
+	// PostgreSQL behavior (pg_typeof(f()::record) returns the original type)
+	// and allows downstream type-checking (e.g. in VALUES) to detect type
+	// mismatches at planning time rather than hitting an assertion at execution.
+	if canElideCast && exprType.Identical(types.AnyTuple) &&
+		castFrom.Family() == types.TupleFamily && !types.IsWildcardTupleType(castFrom) {
+		return typedSubExpr, nil
+	}
 	if exprType.Identical(types.Trigger) {
 		// Trigger is not allowed in casts. This happens after resolving the cast to
 		// ensure that we return an "invalid cast" error when postgres does.

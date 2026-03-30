@@ -341,3 +341,38 @@ public  et5   root
 statement ok
 DROP DATABASE "CaseSensitiveDatabase";
 USE test;
+
+# Regression tests for casting composite types to RECORD in VALUES clauses.
+# Casting a concrete tuple to RECORD should preserve the original type so that
+# the VALUES type checker can detect mismatches at planning time.
+
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
+
+# Mismatched column types: t is (INT, TEXT) but the second row is (TEXT, INT).
+statement error VALUES types record and record cannot be matched
+SELECT * FROM (VALUES (ROW(1,'hi')::t::RECORD), (('x', 1))) AS v(x)
+
+# Matching column types: both rows are compatible with (INT, TEXT).
+query T
+SELECT * FROM (VALUES (ROW(1,'hi')::t::RECORD), ((1, 'x'))) AS v(x)
+----
+(1,hi)
+(1,x)
+
+# UDF returning a composite type cast to RECORD in VALUES.
+statement ok
+CREATE FUNCTION f_comp() RETURNS t LANGUAGE SQL AS $$ SELECT ROW(1, 'hi')::t $$
+
+statement error VALUES types record and record cannot be matched
+SELECT * FROM (VALUES (f_comp()::RECORD), (('x', 1))) AS v(x)
+
+# Casting to RECORD outside of VALUES should still work (no regression).
+query T
+SELECT f_comp()::RECORD
+----
+(1,hi)
+
+statement ok
+DROP FUNCTION f_comp;
+DROP TYPE t
