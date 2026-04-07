@@ -846,6 +846,13 @@ func TestLogic_edge(
 	runLogicTest(t, "edge")
 }
 
+func TestLogic_enum_plpgsql_version(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "enum_plpgsql_version")
+}
+
 func TestLogic_enums(
 	t *testing.T,
 ) {
