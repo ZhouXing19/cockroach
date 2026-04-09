@@ -1,0 +1,96 @@
+statement ok
+CREATE TABLE t164666_t1 (
+ k1 INT8 NOT NULL,                                                                               
+ k2 INT8 NOT NULL,                                                                               
+ a1 STRING NULL,                                                                                 
+ fk1 INT8 NULL,                                                                                  
+ CONSTRAINT pk_t164666_t1 PRIMARY KEY (k1 ASC),                                                  
+ INDEX ix_t164666_t1_k2 (k2 ASC)                                                                 
+);                                                                                                
+
+statement ok
+CREATE TABLE t164666_t3 (                                                                         
+ k4 INT8 NOT NULL,                                                                               
+ fk2 STRING NOT NULL DEFAULT '',                                                                 
+ k2 INT8 NULL,                                                                                   
+ k1 INT8 NULL,                                                                                   
+ b1 BOOL NULL,                                                                                   
+ CONSTRAINT pk_t164666_t3 PRIMARY KEY (k4 ASC),                                                  
+ INDEX ix_t164666_t3_k2 (k2 ASC)                                                                 
+);    
+
+statement ok
+SET plan_cache_mode = force_generic_plan;
+
+statement ok
+PREPARE p164666_generic_or_exists AS SELECT t164666_t1.k1                                         
+FROM t164666_t1                                                                                   
+WHERE t164666_t1.k1 = $1                                                                          
+AND (                                                                                             
+  t164666_t1.a1 IS NOT NULL                                                                       
+  OR EXISTS(                                                                                      
+    SELECT 1                                                                                      
+    FROM t164666_t3                                                                               
+    WHERE t164666_t3.k1 = t164666_t1.k1                                                           
+  )                                                                                               
+); 
+
+
+query T
+EXPLAIN ANALYZE EXECUTE p164666_generic_or_exists(1);               
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• root
+│
+├── • filter
+│   │ sql nodes: <hidden>
+│   │ regions: <hidden>
+│   │ execution time: 0µs
+│   │ actual row count: 0
+│   │ filter: (k1 = 1) AND ((a1 IS NOT NULL) OR COALESCE(@S1, false))
+│   │
+│   └── • scan
+│         sql nodes: <hidden>
+│         kv nodes: <hidden>
+│         regions: <hidden>
+│         KV time: 0µs
+│         KV rows decoded: 0
+│         actual row count: 0
+│         missing stats
+│         table: t164666_t1@pk_t164666_t1
+│         spans: FULL SCAN
+│
+└── • subquery
+    │ id: @S1
+    │ original sql: (SELECT 1 FROM t164666_t3 WHERE t164666_t3.k1 = t164666_t1.k1)
+    │ exec mode: one row
+    │
+    └── • render
+        │ execution time: 0µs
+        │ actual row count: 0
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • filter
+                │ sql nodes: <hidden>
+                │ regions: <hidden>
+                │ execution time: 0µs
+                │ actual row count: 0
+                │ filter: k1 = 1
+                │
+                └── • scan
+                      sql nodes: <hidden>
+                      kv nodes: <hidden>
+                      regions: <hidden>
+                      KV time: 0µs
+                      KV rows decoded: 0
+                      actual row count: 0
+                      missing stats
+                      table: t164666_t3@pk_t164666_t3
+                      spans: FULL SCAN (SOFT LIMIT)

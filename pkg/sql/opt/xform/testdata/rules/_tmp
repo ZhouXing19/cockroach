@@ -1,0 +1,482 @@
+exec-ddl
+CREATE TABLE t164666_t1 (
+ k1 INT8 NOT NULL,
+ k2 INT8 NOT NULL,
+ a1 STRING NULL,
+ fk1 INT8 NULL,
+ CONSTRAINT pk_t164666_t1 PRIMARY KEY (k1 ASC),
+ INDEX ix_t164666_t1_k2 (k2 ASC)
+)
+----
+
+exec-ddl
+CREATE TABLE t164666_t3 (
+ k4 INT8 NOT NULL,
+ fk2 STRING NOT NULL DEFAULT '',
+ k2 INT8 NULL,
+ k1 INT8 NULL,
+ b1 BOOL NULL,
+ CONSTRAINT pk_t164666_t3 PRIMARY KEY (k4 ASC),
+ INDEX ix_t164666_t3_k2 (k2 ASC)
+)
+----
+
+exploretrace
+SELECT t164666_t1.k1
+FROM t164666_t1
+WHERE t164666_t1.k1 = 1
+AND (
+  t164666_t1.a1 IS NOT NULL
+  OR EXISTS(
+    SELECT 1
+    FROM t164666_t3
+    WHERE t164666_t3.k1 = t164666_t1.k1
+  )
+)
+----
+----
+================================================================================
+GenerateIndexScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+
+================================================================================
+GenerateIndexScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+
+================================================================================
+GeneratePartialIndexScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+
+================================================================================
+GenerateConstrainedScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+
+================================================================================
+GenerateZigzagJoins
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+
+================================================================================
+GeneratePartialIndexScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+
+================================================================================
+GenerateConstrainedScans
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+New expression 1 of 1:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── constraint: /1: [/1 - /1]
+        │    ├── cardinality: [0 - 1]
+        │    ├── key: ()
+        │    └── fd: ()-->(1,3)
+        └── filters
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+================================================================================
+GenerateZigzagJoins
+================================================================================
+Source expression:
+  project
+   ├── columns: k1:1!null
+   ├── cardinality: [0 - 1]
+   ├── key: ()
+   ├── fd: ()-->(1)
+   └── select
+        ├── columns: t164666_t1.k1:1!null a1:3
+        ├── cardinality: [0 - 1]
+        ├── key: ()
+        ├── fd: ()-->(1,3)
+        ├── scan t164666_t1
+        │    ├── columns: t164666_t1.k1:1!null a1:3
+        │    ├── key: (1)
+        │    └── fd: (1)-->(3)
+        └── filters
+             ├── t164666_t1.k1:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+             └── or [outer=(3), subquery]
+                  ├── a1:3 IS NOT NULL
+                  └── coalesce
+                       ├── subquery
+                       │    └── project
+                       │         ├── columns: column16:16!null
+                       │         ├── cardinality: [0 - 1]
+                       │         ├── key: ()
+                       │         ├── fd: ()-->(16)
+                       │         ├── limit
+                       │         │    ├── columns: t164666_t3.k1:10!null
+                       │         │    ├── cardinality: [0 - 1]
+                       │         │    ├── key: ()
+                       │         │    ├── fd: ()-->(10)
+                       │         │    ├── select
+                       │         │    │    ├── columns: t164666_t3.k1:10!null
+                       │         │    │    ├── fd: ()-->(10)
+                       │         │    │    ├── limit hint: 1.00
+                       │         │    │    ├── scan t164666_t3
+                       │         │    │    │    ├── columns: t164666_t3.k1:10
+                       │         │    │    │    └── limit hint: 100.00
+                       │         │    │    └── filters
+                       │         │    │         └── t164666_t3.k1:10 = 1 [outer=(10), constraints=(/10: [/1 - /1]; tight), fd=()-->(10)]
+                       │         │    └── 1
+                       │         └── projections
+                       │              └── true [as=column16:16]
+                       └── false
+
+No new expressions.
+----
+----
